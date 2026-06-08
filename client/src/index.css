@@ -11,6 +11,20 @@
     @apply font-sans antialiased bg-background text-foreground transition-colors duration-200;
   }
 
+  /* Respect users who request reduced motion (WCAG 2.3.3).
+     Near-instant durations preserve state changes (e.g. dropdowns,
+     dialogs) without animating them. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
   :root {
     /* Light mode */
     --background: 0 0% 100%; /* white */
