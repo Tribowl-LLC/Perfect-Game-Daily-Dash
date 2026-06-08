@@ -49,6 +49,32 @@ const SYNC_TYPE_LABELS: Record<string, string> = {
   giftCardRedemptions: 'Gift Card Redemptions',
 };
 
+const formatSyncTime = (ts: string | null) => {
+  if (!ts) return 'Never';
+  const d = new Date(ts);
+  return `${formatDistanceToNow(d, { addSuffix: true })} (${format(d, 'MMM d, yyyy h:mm a')})`;
+};
+
+const staleDays = (ts: string | null) => {
+  if (!ts) return null;
+  return Math.floor((Date.now() - new Date(ts).getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const formatLastUsed = (ts: string | null) => {
+  if (!ts) return 'Never';
+  const d = new Date(ts);
+  return `${formatDistanceToNow(d, { addSuffix: true })}`;
+};
+
+const formatNumber = (n: number) => n.toLocaleString();
+
+const formatWindow = (ms: number) => {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
+};
+
 export default function Admin() {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -100,17 +126,6 @@ export default function Admin() {
   if (!user || user.role !== 'admin') {
     return null;
   }
-
-  const formatSyncTime = (ts: string | null) => {
-    if (!ts) return 'Never';
-    const d = new Date(ts);
-    return `${formatDistanceToNow(d, { addSuffix: true })} (${format(d, 'MMM d, yyyy h:mm a')})`;
-  };
-
-  const staleDays = (ts: string | null) => {
-    if (!ts) return null;
-    return Math.floor((Date.now() - new Date(ts).getTime()) / (1000 * 60 * 60 * 24));
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -1391,12 +1406,6 @@ function AdminSecurityOverviewCard() {
     },
   });
 
-  const formatLastUsed = (ts: string | null) => {
-    if (!ts) return 'Never';
-    const d = new Date(ts);
-    return `${formatDistanceToNow(d, { addSuffix: true })}`;
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -1623,7 +1632,6 @@ function UserCacheDiagnosticsCard() {
 
   const totalLookups = stats ? stats.hits + stats.misses : 0;
   const hitRatio = totalLookups > 0 ? (stats!.hits / totalLookups) * 100 : null;
-  const formatNumber = (n: number) => n.toLocaleString();
 
   return (
     <Card>
@@ -1777,13 +1785,6 @@ function TotpAuthAlertsCard() {
     // on the Refresh button surfaces long-running fetches.
     refetchIntervalInBackground: false,
   });
-
-  const formatWindow = (ms: number) => {
-    const minutes = Math.round(ms / 60_000);
-    if (minutes < 60) return `${minutes}m`;
-    const hours = minutes / 60;
-    return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
-  };
 
   const totalAlerts = (data?.bruteForce.length ?? 0) + (data?.recoveryBurst.length ?? 0);
 

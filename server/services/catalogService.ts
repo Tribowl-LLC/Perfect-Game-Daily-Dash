@@ -82,6 +82,7 @@ export async function syncCatalog(): Promise<{
       let catPage = await squareClient.catalog.list({ types: 'CATEGORY' });
       while (true) {
         const objects = catPage.data ?? [];
+        const pageCategories: InsertSquareCategory[] = [];
         for (const obj of objects) {
           if (obj.type !== 'CATEGORY' || !obj.categoryData) continue;
           const catId = obj.id as string;
@@ -99,24 +100,21 @@ export async function syncCatalog(): Promise<{
             (typeof catData.parentCategoryId === 'string' && catData.parentCategoryId) ||
             null;
           categoryMap.set(catId, catName);
-
+          pageCategories.push({ squareCategoryId: catId, name: catName, parentCategoryId, updatedAt: new Date() });
+        }
+        if (pageCategories.length > 0) {
           await db
             .insert(squareCategories)
-            .values({
-              squareCategoryId: catId,
-              name: catName,
-              parentCategoryId,
-              updatedAt: new Date(),
-            } satisfies InsertSquareCategory)
+            .values(pageCategories)
             .onConflictDoUpdate({
               target: squareCategories.squareCategoryId,
               set: {
-                name: catName,
-                parentCategoryId,
-                updatedAt: new Date(),
+                name: sql`excluded.name`,
+                parentCategoryId: sql`excluded.parent_category_id`,
+                updatedAt: sql`excluded.updated_at`,
               },
             });
-          categoryCount++;
+          categoryCount += pageCategories.length;
         }
         if (!catPage.hasNextPage() || objects.length === 0) break;
         catPage = await catPage.getNextPage();
@@ -133,115 +131,107 @@ export async function syncCatalog(): Promise<{
       let itemPage = await squareClient.catalog.list({ types: 'ITEM' });
       while (true) {
         const itemObjects = itemPage.data ?? [];
+        const pageItems: InsertSquareCatalogItem[] = [];
         for (const obj of itemObjects) {
-        if (obj.type !== 'ITEM' || !obj.itemData) continue;
+          if (obj.type !== 'ITEM' || !obj.itemData) continue;
 
-        const itemData = obj.itemData;
-        const catalogObjectId = obj.id;
-        const itemName = itemData.name || 'Unnamed Item';
-        // Square uses `is_deleted` on the catalog object for archived
-        // SKUs. Capture it so the items dashboard can hide retired items
-        // without losing their historical sales data.
-        const objAny = obj as unknown as Record<string, unknown>;
-        const isArchived = objAny.isDeleted === true || objAny.is_deleted === true;
+          const itemData = obj.itemData;
+          const catalogObjectId = obj.id;
+          const itemName = itemData.name || 'Unnamed Item';
+          // Square uses `is_deleted` on the catalog object for archived
+          // SKUs. Capture it so the items dashboard can hide retired items
+          // without losing their historical sales data.
+          const objAny = obj as unknown as Record<string, unknown>;
+          const isArchived = objAny.isDeleted === true || objAny.is_deleted === true;
 
-        let categoryId: string | null = null;
-        let categoryName: string | null = null;
+          let categoryId: string | null = null;
+          let categoryName: string | null = null;
 
-        if (itemData.categories && itemData.categories.length > 0) {
-          const firstCat = itemData.categories[0];
-          categoryId = firstCat.id || null;
-          if (categoryId && categoryMap.has(categoryId)) {
-            categoryName = categoryMap.get(categoryId)!;
+          if (itemData.categories && itemData.categories.length > 0) {
+            const firstCat = itemData.categories[0];
+            categoryId = firstCat.id || null;
+            if (categoryId && categoryMap.has(categoryId)) {
+              categoryName = categoryMap.get(categoryId)!;
+            }
           }
-        }
 
-        if (!categoryId && itemData.reportingCategory?.id) {
-          categoryId = itemData.reportingCategory.id;
-          if (categoryId && categoryMap.has(categoryId)) {
-            categoryName = categoryMap.get(categoryId)!;
+          if (!categoryId && itemData.reportingCategory?.id) {
+            categoryId = itemData.reportingCategory.id;
+            if (categoryId && categoryMap.has(categoryId)) {
+              categoryName = categoryMap.get(categoryId)!;
+            }
           }
-        }
 
-        if (!categoryId && itemData.categoryId) {
-          categoryId = itemData.categoryId;
-          if (categoryId && categoryMap.has(categoryId)) {
-            categoryName = categoryMap.get(categoryId)!;
+          if (!categoryId && itemData.categoryId) {
+            categoryId = itemData.categoryId;
+            if (categoryId && categoryMap.has(categoryId)) {
+              categoryName = categoryMap.get(categoryId)!;
+            }
           }
-        }
 
-        if (!categoryName && categoryId) {
-          const catRows = await db
-            .select()
-            .from(squareCategories)
-            .where(eq(squareCategories.squareCategoryId, categoryId))
-            .limit(1);
-          if (catRows.length > 0) {
-            categoryName = catRows[0].name;
+          if (!categoryName && categoryId) {
+            const catRows = await db
+              .select()
+              .from(squareCategories)
+              .where(eq(squareCategories.squareCategoryId, categoryId))
+              .limit(1);
+            if (catRows.length > 0) {
+              categoryName = catRows[0].name;
+            }
           }
-        }
 
-        await db
-          .insert(squareCatalogItems)
-          .values({
+          pageItems.push({
             squareCatalogObjectId: catalogObjectId,
             categoryId,
             categoryName,
             itemName,
             isArchived,
             updatedAt: new Date(),
-          } satisfies InsertSquareCatalogItem)
-          .onConflictDoUpdate({
-            target: squareCatalogItems.squareCatalogObjectId,
-            set: {
-              categoryId,
-              categoryName,
-              itemName,
-              isArchived,
-              updatedAt: new Date(),
-            },
-          });
-        itemCount++;
+          } satisfies InsertSquareCatalogItem);
 
-        if (itemData.variations && Array.isArray(itemData.variations)) {
-          for (const variation of itemData.variations) {
-            if (!variation.id) continue;
-            const varName = 'itemVariationData' in variation && variation.itemVariationData
-              && typeof variation.itemVariationData === 'object'
-              && 'name' in variation.itemVariationData
-              && typeof variation.itemVariationData.name === 'string'
-              ? `${itemName} - ${variation.itemVariationData.name}`
-              : itemName;
-            // A variation inherits its parent item's archived state unless Square
-            // marked the variation itself as deleted; either is enough to retire it.
-            const varAny = variation as unknown as Record<string, unknown>;
-            const varArchived = isArchived
-              || varAny.isDeleted === true
-              || varAny.is_deleted === true;
+          if (itemData.variations && Array.isArray(itemData.variations)) {
+            for (const variation of itemData.variations) {
+              if (!variation.id) continue;
+              const varName = 'itemVariationData' in variation && variation.itemVariationData
+                && typeof variation.itemVariationData === 'object'
+                && 'name' in variation.itemVariationData
+                && typeof variation.itemVariationData.name === 'string'
+                ? `${itemName} - ${variation.itemVariationData.name}`
+                : itemName;
+              // A variation inherits its parent item's archived state unless Square
+              // marked the variation itself as deleted; either is enough to retire it.
+              const varAny = variation as unknown as Record<string, unknown>;
+              const varArchived = isArchived
+                || varAny.isDeleted === true
+                || varAny.is_deleted === true;
 
-            await db
-              .insert(squareCatalogItems)
-              .values({
+              pageItems.push({
                 squareCatalogObjectId: variation.id,
                 categoryId,
                 categoryName,
                 itemName: varName,
                 isArchived: varArchived,
                 updatedAt: new Date(),
-              } satisfies InsertSquareCatalogItem)
-              .onConflictDoUpdate({
-                target: squareCatalogItems.squareCatalogObjectId,
-                set: {
-                  categoryId,
-                  categoryName,
-                  itemName: varName,
-                  isArchived: varArchived,
-                  updatedAt: new Date(),
-                },
-              });
-            itemCount++;
+              } satisfies InsertSquareCatalogItem);
+            }
           }
         }
+
+        if (pageItems.length > 0) {
+          await db
+            .insert(squareCatalogItems)
+            .values(pageItems)
+            .onConflictDoUpdate({
+              target: squareCatalogItems.squareCatalogObjectId,
+              set: {
+                categoryId: sql`excluded.category_id`,
+                categoryName: sql`excluded.category_name`,
+                itemName: sql`excluded.item_name`,
+                isArchived: sql`excluded.is_archived`,
+                updatedAt: sql`excluded.updated_at`,
+              },
+            });
+          itemCount += pageItems.length;
         }
         if (!itemPage.hasNextPage() || itemObjects.length === 0) break;
         itemPage = await itemPage.getNextPage();

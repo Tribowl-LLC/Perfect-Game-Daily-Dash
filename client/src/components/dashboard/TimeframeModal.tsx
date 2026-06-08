@@ -134,23 +134,21 @@ export default function TimeframeModal({
             <>
               <div className="space-y-2 mt-2">
                 {timeframes.map((timeframe) => (
-                  <div
+                  <button
                     key={timeframe.value}
-                    role="button"
-                    tabIndex={0}
-                    className={`p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
+                    type="button"
+                    className={`w-full p-3 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
                       selectedRange === timeframe.value 
                         ? "bg-primary text-white shadow-lg shadow-primary/20" 
                         : "bg-white/5 hover:bg-white/10 text-white border border-white/5"
                     }`}
                     onClick={() => handleSelectRange(timeframe.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectRange(timeframe.value); } }}
                   >
                     <span className="font-medium">{timeframe.label}</span>
                     {selectedRange === timeframe.value && (
                       <CheckCircle className="h-5 w-5" />
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
 

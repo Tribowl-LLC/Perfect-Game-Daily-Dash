@@ -128,12 +128,10 @@ export function ensureMcpReadRole(): Promise<void> {
         `REVOKE USAGE ON SCHEMA information_schema FROM PUBLIC`,
         `REVOKE SELECT ON ALL TABLES IN SCHEMA information_schema FROM PUBLIC`,
       ];
-      for (const stmt of publicRevokes) {
-        await client.query(stmt).catch(() => {
-          // Ignore — on managed Postgres without superuser this
-          // cannot succeed; the operator script handles it instead.
-        });
-      }
+      await Promise.all(publicRevokes.map(stmt => client.query(stmt).catch(() => {
+        // Ignore — on managed Postgres without superuser this
+        // cannot succeed; the operator script handles it instead.
+      })));
       // Defense-in-depth: revoke any direct grants that may have been
       // attached to the role for these surfaces. NOINHERIT means the
       // role cannot use grants made to its members either, but this
@@ -143,11 +141,9 @@ export function ensureMcpReadRole(): Promise<void> {
         `REVOKE ALL ON SCHEMA information_schema FROM ${MCP_READ_ROLE}`,
         `REVOKE ALL ON ALL TABLES IN SCHEMA information_schema FROM ${MCP_READ_ROLE}`,
       ];
-      for (const stmt of roleRevokes) {
-        await client.query(stmt).catch(() => {
-          // Idempotent across providers with varying grant defaults.
-        });
-      }
+      await Promise.all(roleRevokes.map(stmt => client.query(stmt).catch(() => {
+        // Idempotent across providers with varying grant defaults.
+      })));
       logger.info('db.mcp_read_role.ready', { count: MCP_READ_TABLES.length });
     } finally {
       client.release();

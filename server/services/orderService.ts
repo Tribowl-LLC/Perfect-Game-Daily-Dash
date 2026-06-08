@@ -166,31 +166,17 @@ export class OrderService {
       const order = orderResult[0];
       
       // Create order items
-      for (const item of items) {
-        const itemData: InsertOrderLineItem = {
-          ...item,
-          orderId: order.id
-        };
-        
-        const itemResult = await tx.insert(orderLineItems).values(itemData).returning();
-        
-        if (!itemResult.length) {
-          throw new OrderError('Failed to create order item', 'DB_ERROR');
-        }
+      if (items.length > 0) {
+        await tx.insert(orderLineItems).values(
+          items.map(item => ({ ...item, orderId: order.id }))
+        );
       }
-      
+
       // Create order discounts
-      for (const discount of discounts) {
-        const discountData: InsertOrderDiscount = {
-          ...discount,
-          orderId: order.id
-        };
-        
-        const discountResult = await tx.insert(orderDiscounts).values(discountData).returning();
-        
-        if (!discountResult.length) {
-          throw new OrderError('Failed to create order discount', 'DB_ERROR');
-        }
+      if (discounts.length > 0) {
+        await tx.insert(orderDiscounts).values(
+          discounts.map(discount => ({ ...discount, orderId: order.id }))
+        );
       }
       
       return order;

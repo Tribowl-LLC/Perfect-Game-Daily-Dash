@@ -651,15 +651,16 @@ export class GiftCardService {
       return { inserted: 0 };
     }
 
-    let inserted = 0;
-    for (const order of fetched) {
+    const insertResults = await Promise.all(fetched.map(async (order) => {
       try {
         await db.insert(orders).values(order).onConflictDoNothing();
-        inserted++;
+        return 1;
       } catch (err) {
         logger.error('giftCard.backfill.order_insert_failed', { ...errorContext(err), squareId: order.squareId });
+        return 0;
       }
-    }
+    }));
+    const inserted = insertResults.reduce((sum, n) => sum + n, 0);
 
     logger.info('giftCard.backfill.missing_orders_inserted', { inserted, fetched: fetched.length });
     return { inserted };
@@ -851,14 +852,16 @@ export class GiftCardService {
 
       if (deletedIds.length > 0) {
         const BATCH_SIZE = 500;
-        let zeroed = 0;
+        const batches: string[][] = [];
         for (let i = 0; i < deletedIds.length; i += BATCH_SIZE) {
-          const batch = deletedIds.slice(i, i + BATCH_SIZE);
-          const result = await db.update(giftCards)
-            .set({ amount: 0, isActive: false, updatedAt: new Date() })
-            .where(inArray(giftCards.squareId, batch));
-          zeroed += result.rowCount ?? 0;
+          batches.push(deletedIds.slice(i, i + BATCH_SIZE));
         }
+        const batchResults = await Promise.all(batches.map(batch =>
+          db.update(giftCards)
+            .set({ amount: 0, isActive: false, updatedAt: new Date() })
+            .where(inArray(giftCards.squareId, batch))
+        ));
+        const zeroed = batchResults.reduce((sum, r) => sum + (r.rowCount ?? 0), 0);
         logger.info('giftCard.balanceRefresh.zeroed_deleted', { count: zeroed });
       }
     } else {

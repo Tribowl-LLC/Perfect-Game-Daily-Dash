@@ -187,9 +187,9 @@ export class IntercardService {
 
       if (fetchResult.rows.length === 0) return;
 
-      for (const row of fetchResult.rows) {
-        try {
-          await tx.insert(intercardRevenue).values({
+      try {
+        await tx.insert(intercardRevenue).values(
+          fetchResult.rows.map(row => ({
             date: dateStr,
             locationId: String(row.LocationID ?? ''),
             deviceType: String(row.DeviceType ?? ''),
@@ -201,12 +201,12 @@ export class IntercardService {
             otherPayment: Number(row.OtherPayment) || 0,
             customerCardUse: Number(row.CustomerCardUse) || 0,
             revenue: Number(row.Revenue) || 0,
-          });
-          result.upserted++;
-        } catch (err) {
-          result.failed++;
-          logger.error('intercard.insert_error', errorContext(err));
-        }
+          }))
+        );
+        result.upserted += fetchResult.rows.length;
+      } catch (err) {
+        result.failed += fetchResult.rows.length;
+        logger.error('intercard.insert_error', errorContext(err));
       }
     });
 

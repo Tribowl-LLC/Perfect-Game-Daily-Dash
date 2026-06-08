@@ -1788,10 +1788,14 @@ export class SyncService {
                 }
                 if (lineItemRows.length > 0) {
                   const LI_BATCH = 500;
-                  for (let lb = 0; lb < lineItemRows.length; lb += LI_BATCH) {
-                    await db.insert(orderLineItems).values(lineItemRows.slice(lb, lb + LI_BATCH))
-                      .onConflictDoNothing();
-                  }
+                  await Promise.all(
+                    Array.from(
+                      { length: Math.ceil(lineItemRows.length / LI_BATCH) },
+                      (_, i) => db.insert(orderLineItems)
+                        .values(lineItemRows.slice(i * LI_BATCH, (i + 1) * LI_BATCH))
+                        .onConflictDoNothing()
+                    )
+                  );
                 }
               }
             }
@@ -1825,21 +1829,24 @@ export class SyncService {
             let chunkPaymentsUpserted = 0;
             if (paymentRows.length > 0) {
               const BATCH = 200;
+              const batchInserts: Array<Promise<{ id: number }[]>> = [];
               for (let b = 0; b < paymentRows.length; b += BATCH) {
-                const batch = paymentRows.slice(b, b + BATCH);
-                const upserted = await db.insert(transactions).values(batch)
-                  .onConflictDoUpdate({
-                    target: transactions.squareId,
-                    set: {
-                      amount: sql`excluded.amount`,
-                      status: sql`excluded.status`,
-                      squareData: sql`excluded.square_data`,
-                      categoryId: sql`excluded.category_id`,
-                    },
-                  })
-                  .returning({ id: transactions.id });
-                chunkPaymentsUpserted += upserted.length;
+                batchInserts.push(
+                  db.insert(transactions).values(paymentRows.slice(b, b + BATCH))
+                    .onConflictDoUpdate({
+                      target: transactions.squareId,
+                      set: {
+                        amount: sql`excluded.amount`,
+                        status: sql`excluded.status`,
+                        squareData: sql`excluded.square_data`,
+                        categoryId: sql`excluded.category_id`,
+                      },
+                    })
+                    .returning({ id: transactions.id })
+                );
               }
+              const batchResults = await Promise.all(batchInserts);
+              for (const r of batchResults) chunkPaymentsUpserted += r.length;
             }
 
             totalPayments += squarePayments.length;
