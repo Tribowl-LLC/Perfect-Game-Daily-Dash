@@ -37,8 +37,10 @@ interface BackfillCheckpoint {
   failedDays: number;
 }
 
+const easternDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+
 function formatDateET(d: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
+  return easternDateFormatter.format(d);
 }
 
 function getEasternUtcOffset(d: Date): number {

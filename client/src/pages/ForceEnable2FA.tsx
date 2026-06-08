@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ interface TotpEnrollResponse {
 export default function ForceEnable2FA() {
   const { user, logout, checkAuth } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [enrollment, setEnrollment] = useState<TotpEnrollResponse | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState('');
@@ -60,6 +61,7 @@ export default function ForceEnable2FA() {
       setEnrollment(data);
       setRecoveryCodes(null);
       setVerifyCode('');
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
     },
     onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : 'Could not start enrollment.';
@@ -77,6 +79,7 @@ export default function ForceEnable2FA() {
       setEnrollment(null);
       setQrDataUrl(null);
       setVerifyCode('');
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({
         title: 'Two-factor authentication enabled',
         description: 'Save your recovery codes — they will not be shown again.',

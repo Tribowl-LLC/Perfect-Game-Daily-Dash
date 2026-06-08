@@ -312,19 +312,23 @@ export function isPositiveChange(value: number): boolean {
   return value >= 0;
 }
 
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const percentageFormatter = new Intl.NumberFormat('en-US', {
+  style: 'percent',
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value);
+  return currencyFormatter.format(value);
 }
 
 export function formatPercentage(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'percent',
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
-  }).format(value);
+  return percentageFormatter.format(value);
 }

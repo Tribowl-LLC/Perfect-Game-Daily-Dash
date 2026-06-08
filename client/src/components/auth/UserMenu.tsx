@@ -37,6 +37,7 @@ export default function UserMenu() {
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={toggleMenu}
         className="relative flex items-center space-x-1 rounded-full px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
       >
@@ -63,6 +64,7 @@ export default function UserMenu() {
 
           {user.role === 'admin' && (
             <button
+              type="button"
               onClick={() => handleNavigate('/admin')}
               className="flex w-full items-center px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
             >
@@ -72,6 +74,7 @@ export default function UserMenu() {
           )}
 
           <button
+            type="button"
             onClick={() => handleNavigate('/')}
             className="flex w-full items-center px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
           >
@@ -80,6 +83,7 @@ export default function UserMenu() {
           </button>
 
           <button
+            type="button"
             onClick={handleLogout}
             className="flex w-full items-center px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
           >

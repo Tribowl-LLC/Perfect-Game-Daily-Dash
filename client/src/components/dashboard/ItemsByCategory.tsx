@@ -54,16 +54,17 @@ interface ItemsByCategoryProps {
 
 const ALL_VALUE = "__all__";
 
-const formatRevenue = (n: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+const revenueFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
-const formatInt = (n: number) =>
-  new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n);
+const intFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
+const formatRevenue = (n: number) => revenueFormatter.format(n);
+const formatInt = (n: number) => intFormatter.format(n);
 
 const metricValue = (item: RankedItem, metric: ItemMetric): number =>
   metric === "revenue"

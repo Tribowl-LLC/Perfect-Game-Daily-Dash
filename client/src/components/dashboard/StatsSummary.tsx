@@ -307,8 +307,11 @@ export default function StatsSummary({ dateRange, customStartDate, customEndDate
             </div>
 
             <div
+              role="button"
+              tabIndex={0}
               className="flex justify-between items-center cursor-pointer select-none"
               onClick={() => setDepositClearingsExpanded(!depositClearingsExpanded)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDepositClearingsExpanded(!depositClearingsExpanded); } }}
             >
               <div className="flex items-center gap-1.5">
                 {depositClearingsExpanded ? (
@@ -340,8 +343,11 @@ export default function StatsSummary({ dateRange, customStartDate, customEndDate
             </div>
 
             <div
+              role="button"
+              tabIndex={0}
               className="flex justify-between items-center cursor-pointer select-none"
               onClick={() => setGcRedemptionsExpanded(!gcRedemptionsExpanded)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setGcRedemptionsExpanded(!gcRedemptionsExpanded); } }}
             >
               <div className="flex items-center gap-1.5">
                 {gcRedemptionsExpanded ? (
@@ -411,8 +417,11 @@ export default function StatsSummary({ dateRange, customStartDate, customEndDate
             {(initialFees > 0 || netProcessingFees !== 0) && (
               <>
                 <div
+                  role="button"
+                  tabIndex={0}
                   className="flex justify-between items-center pt-3 border-t border-border cursor-pointer select-none"
                   onClick={() => setFeesExpanded(!feesExpanded)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFeesExpanded(!feesExpanded); } }}
                 >
                   <div className="flex items-center gap-1.5">
                     {feesExpanded ? (
@@ -491,8 +500,11 @@ export default function StatsSummary({ dateRange, customStartDate, customEndDate
             </div>
 
             <div
+              role="button"
+              tabIndex={0}
               className="flex justify-between items-center cursor-pointer select-none"
               onClick={() => setIntercardExpanded(!intercardExpanded)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIntercardExpanded(!intercardExpanded); } }}
             >
               <div className="flex items-center gap-1.5">
                 {intercardExpanded ? (

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 type Theme = 'light' | 'dark';
 
@@ -18,10 +18,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
-  // Toggle between light and dark mode
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
+  // Toggle between light and dark mode — stable reference (no deps needed
+  // because we use the functional-update form of setTheme).
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  }, []);
 
   // Update localStorage and body class when theme changes
   useEffect(() => {
@@ -35,8 +36,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [theme]);
 
+  const value = useMemo(
+    () => ({ theme, setTheme, toggleTheme }),
+    [theme, setTheme, toggleTheme],
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

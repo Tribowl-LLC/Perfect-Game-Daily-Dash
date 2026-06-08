@@ -122,6 +122,7 @@ export default function Admin() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => navigate('/admin/mcp-audit')}
               className="flex items-center rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
             >
@@ -129,6 +130,7 @@ export default function Admin() {
               SQL Query History
             </button>
             <button
+              type="button"
               onClick={() => navigate('/admin/sync-audit')}
               className="flex items-center rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
             >
@@ -136,6 +138,7 @@ export default function Admin() {
               Backfill Audit
             </button>
             <button
+              type="button"
               onClick={() => navigate('/')}
               className="flex items-center rounded-md bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300"
             >
@@ -831,7 +834,7 @@ function AppSettingsRegistryStatusCard() {
                           // diagnostic detail.
                           <ul className="space-y-1 text-xs text-destructive">
                             {entry.issues.map((issue, idx) => (
-                              <li key={idx} className="flex gap-2">
+                              <li key={`${issue.path ?? idx}:${issue.message}`} className="flex gap-2">
                                 <span className="font-mono">
                                   {issue.path || '(root)'}:
                                 </span>

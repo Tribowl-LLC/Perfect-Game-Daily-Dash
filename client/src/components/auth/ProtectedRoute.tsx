@@ -12,14 +12,13 @@ export default function ProtectedRoute({
   children, 
   requiredRole 
 }: ProtectedRouteProps) {
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { user, isLoading, isAuthenticated, checkAuth } = useAuth();
   const [, navigate] = useLocation();
   
   // Force a check for authentication on component mount
-  const auth = useAuth();
   useEffect(() => {
-    auth.checkAuth();
-  }, []);
+    checkAuth();
+  }, [checkAuth]);
   
   // Use useEffect for navigation to prevent state updates during render
   useEffect(() => {
@@ -51,6 +50,7 @@ export default function ProtectedRoute({
           You don't have permission to access this page.
         </p>
         <button
+          type="button"
           className="mt-4 rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
           onClick={() => navigate('/')}
         >

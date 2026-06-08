@@ -34,14 +34,16 @@ export default function DateRangePicker({
   const [tempEndDate, setTempEndDate] = useState<Date | undefined>(customEndDate);
   const [calendarMode, setCalendarMode] = useState<'start' | 'end'>('start');
 
-  // Sync with external state
+  // Sync with external state. Use functional updates to avoid reading
+  // tempStartDate/tempEndDate as effect deps (they're only needed for
+  // the conditional check, not as synchronization triggers).
   useEffect(() => {
     if (value !== 'custom') {
       setTempStartDate(undefined);
       setTempEndDate(undefined);
     } else {
-      if (!tempStartDate) setTempStartDate(customStartDate);
-      if (!tempEndDate) setTempEndDate(customEndDate);
+      setTempStartDate((prev) => prev ?? customStartDate);
+      setTempEndDate((prev) => prev ?? customEndDate);
     }
   }, [value, customStartDate, customEndDate]);
 

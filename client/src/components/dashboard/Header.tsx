@@ -91,6 +91,7 @@ export default function Header({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
+                        type="button"
                         className="p-2 cursor-pointer hover:bg-accent/50 rounded-full transition-colors"
                         onClick={handlePrevDate}
                         aria-label="Previous date"
@@ -104,7 +105,8 @@ export default function Header({
                   </Tooltip>
                 </TooltipProvider>
                 
-                <button 
+                <button
+                  type="button"
                   className="flex items-center gap-2 text-center font-medium text-foreground mx-2 cursor-pointer px-4 py-1.5 hover:bg-accent/50 rounded-md transition-colors"
                   onClick={onOpenTimeframeModal}
                 >
@@ -116,6 +118,7 @@ export default function Header({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
+                        type="button"
                         className="p-2 cursor-pointer hover:bg-accent/50 rounded-full transition-colors"
                         onClick={handleNextDate}
                         aria-label="Next date"

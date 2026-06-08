@@ -66,6 +66,7 @@ export default function AccountSettings() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
@@ -88,6 +89,7 @@ export default function AccountSettings() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({
         title: 'Password updated',
         description:

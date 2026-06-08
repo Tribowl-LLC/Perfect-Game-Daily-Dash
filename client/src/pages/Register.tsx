@@ -41,6 +41,7 @@ export default function Register() {
         
         <div className="mt-8 flex justify-center">
           <button
+            type="button"
             onClick={() => navigate('/login')}
             className="flex items-center rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
           >

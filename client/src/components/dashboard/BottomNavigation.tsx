@@ -15,7 +15,8 @@ interface NavItemProps {
 
 const NavItem = ({ icon, label, active, onClick }: NavItemProps) => {
   return (
-    <button 
+    <button
+      type="button"
       className="flex flex-col items-center justify-center w-1/4 relative py-2 transition-all"
       onClick={onClick}
     >
