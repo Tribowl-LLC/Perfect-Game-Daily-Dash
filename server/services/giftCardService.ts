@@ -660,7 +660,7 @@ export class GiftCardService {
         return 0;
       }
     }));
-    const inserted = insertResults.reduce((sum, n) => sum + n, 0);
+    const inserted = insertResults.reduce<number>((sum, n) => sum + n, 0);
 
     logger.info('giftCard.backfill.missing_orders_inserted', { inserted, fetched: fetched.length });
     return { inserted };
