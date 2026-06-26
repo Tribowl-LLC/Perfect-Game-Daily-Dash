@@ -585,6 +585,16 @@ export interface RankedItem {
   revenue: number;
   units: number;
   transactions: number;
+  shareOfCategory: number;
+  shareOfTotal: number;
+  sourceBreakdown: ItemSourceBreakdown[];
+}
+
+export interface ItemSourceBreakdown {
+  source: string;
+  revenue: number;
+  units: number;
+  transactions: number;
 }
 
 // Audit log of every MCP `run_read_query` invocation (success or failure).

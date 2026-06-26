@@ -32,9 +32,34 @@ import { getEasternDateRange } from '../dateUtils';
 import type {
   CategoryTreeNode,
   DateRange,
+  ItemSourceBreakdown,
   ItemMetric,
   RankedItem,
 } from '../../shared/schema';
+
+function normalizeSource(source: string | null): string {
+  const clean = (source ?? '').trim();
+  if (!clean) return 'POS';
+
+  const lower = clean.toLowerCase();
+  if (
+    lower.includes('online') ||
+    lower.includes('web') ||
+    lower.includes('pickup') ||
+    lower.includes('delivery')
+  ) {
+    return 'Online';
+  }
+  if (
+    lower.includes('point of sale') ||
+    lower.includes('pos') ||
+    lower.includes('register') ||
+    lower.includes('terminal')
+  ) {
+    return 'POS';
+  }
+  return clean;
+}
 
 export class ItemsService {
   /**
@@ -135,22 +160,54 @@ export class ItemsService {
 
     const { start, end } = getEasternDateRange(dateRange, startDate, endDate);
 
+    const totalsResult = await db.execute<{
+      revenue: string | number | null;
+      units: string | number | null;
+      transactions: string | number | null;
+    }>(sql`
+      SELECT
+        COALESCE(SUM(oli.total_money), 0) AS revenue,
+        COALESCE(SUM(oli.quantity), 0) AS units,
+        COUNT(DISTINCT oli.order_id) AS transactions
+      FROM order_line_items oli
+      INNER JOIN orders o ON o.id = oli.order_id
+      WHERE oli.product_id IS NOT NULL
+        AND o.created_at >= ${start}
+        AND o.created_at <  ${end}
+    `);
+    const totalMetrics = {
+      revenue: Number(totalsResult.rows[0]?.revenue ?? 0),
+      units: Number(totalsResult.rows[0]?.units ?? 0),
+      transactions: Number(totalsResult.rows[0]?.transactions ?? 0),
+    };
+
     // LEFT JOIN catalog items against the windowed sales aggregation so
-    // zero-sales items still come back. We aggregate orders/line-items
-    // in a CTE first to keep the join cardinality manageable on big
-    // catalogs.
+    // zero-sales items still come back. We keep source-level sales rows
+    // separate so the UI can show Online vs POS mix for each item.
     const result = await db.execute<{
       catalog_object_id: string;
       item_name: string | null;
       category_id: string | null;
       category_name: string | null;
+      source: string | null;
       revenue: string | number | null;
       units: string | number | null;
       transactions: string | number | null;
     }>(sql`
-      WITH sales AS (
+      WITH category_items AS (
+        SELECT
+          square_catalog_object_id,
+          item_name,
+          category_id,
+          category_name
+        FROM square_catalog_items
+        WHERE is_archived = false
+          AND category_id = ANY(${categoryIds})
+      ),
+      sales AS (
         SELECT
           oli.product_id AS catalog_object_id,
+          o.source,
           COALESCE(SUM(oli.total_money), 0) AS revenue,
           COALESCE(SUM(oli.quantity), 0) AS units,
           COUNT(DISTINCT oli.order_id) AS transactions
@@ -159,31 +216,77 @@ export class ItemsService {
         WHERE oli.product_id IS NOT NULL
           AND o.created_at >= ${start}
           AND o.created_at <  ${end}
-        GROUP BY oli.product_id
+        GROUP BY oli.product_id, o.source
       )
       SELECT
-        sci.square_catalog_object_id AS catalog_object_id,
-        sci.item_name,
-        sci.category_id,
-        sci.category_name,
+        ci.square_catalog_object_id AS catalog_object_id,
+        ci.item_name,
+        ci.category_id,
+        ci.category_name,
+        s.source,
         COALESCE(s.revenue, 0)       AS revenue,
         COALESCE(s.units, 0)         AS units,
         COALESCE(s.transactions, 0)  AS transactions
-      FROM square_catalog_items sci
-      LEFT JOIN sales s ON s.catalog_object_id = sci.square_catalog_object_id
-      WHERE sci.is_archived = false
-        AND sci.category_id = ANY(${categoryIds})
+      FROM category_items ci
+      LEFT JOIN sales s ON s.catalog_object_id = ci.square_catalog_object_id
     `);
 
-    const items: RankedItem[] = result.rows.map((r) => ({
-      catalogObjectId: r.catalog_object_id,
-      itemName: r.item_name ?? 'Unnamed Item',
-      categoryId: r.category_id,
-      categoryName: r.category_name,
-      revenue: Number(r.revenue ?? 0),
-      units: Number(r.units ?? 0),
-      transactions: Number(r.transactions ?? 0),
-    }));
+    const byItem = new Map<string, RankedItem>();
+    for (const r of result.rows) {
+      const catalogObjectId = r.catalog_object_id;
+      let item = byItem.get(catalogObjectId);
+      if (!item) {
+        item = {
+          catalogObjectId,
+          itemName: r.item_name ?? 'Unnamed Item',
+          categoryId: r.category_id,
+          categoryName: r.category_name,
+          revenue: 0,
+          units: 0,
+          transactions: 0,
+          shareOfCategory: 0,
+          shareOfTotal: 0,
+          sourceBreakdown: [],
+        };
+        byItem.set(catalogObjectId, item);
+      }
+
+      const revenue = Number(r.revenue ?? 0);
+      const units = Number(r.units ?? 0);
+      const transactions = Number(r.transactions ?? 0);
+      item.revenue += revenue;
+      item.units += units;
+      item.transactions += transactions;
+
+      if (revenue !== 0 || units !== 0 || transactions !== 0) {
+        const source = normalizeSource(r.source);
+        let sourceRow = item.sourceBreakdown.find((s) => s.source === source);
+        if (!sourceRow) {
+          sourceRow = { source, revenue: 0, units: 0, transactions: 0 };
+          item.sourceBreakdown.push(sourceRow);
+        }
+        sourceRow.revenue += revenue;
+        sourceRow.units += units;
+        sourceRow.transactions += transactions;
+      }
+    }
+
+    const items = Array.from(byItem.values());
+
+    const selectedMetricValue = (i: RankedItem | ItemSourceBreakdown | typeof totalMetrics) =>
+      metric === 'revenue' ? i.revenue
+      : metric === 'units' ? i.units
+      : i.transactions;
+
+    const categoryTotal = items.reduce((sum, item) => sum + selectedMetricValue(item), 0);
+    const allItemsTotal = selectedMetricValue(totalMetrics);
+
+    for (const item of items) {
+      const value = selectedMetricValue(item);
+      item.shareOfCategory = categoryTotal > 0 ? value / categoryTotal : 0;
+      item.shareOfTotal = allItemsTotal > 0 ? value / allItemsTotal : 0;
+      item.sourceBreakdown.sort((a, b) => selectedMetricValue(b) - selectedMetricValue(a));
+    }
 
     // Sort in JS so the chosen metric is the primary key and the other
     // metrics break ties consistently. Item name is the final tiebreaker

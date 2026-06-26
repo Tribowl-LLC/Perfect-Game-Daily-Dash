@@ -147,16 +147,16 @@ export async function syncCatalog(): Promise<{
           let categoryId: string | null = null;
           let categoryName: string | null = null;
 
-          if (itemData.categories && itemData.categories.length > 0) {
-            const firstCat = itemData.categories[0];
-            categoryId = firstCat.id || null;
+          if (itemData.reportingCategory?.id) {
+            categoryId = itemData.reportingCategory.id;
             if (categoryId && categoryMap.has(categoryId)) {
               categoryName = categoryMap.get(categoryId)!;
             }
           }
 
-          if (!categoryId && itemData.reportingCategory?.id) {
-            categoryId = itemData.reportingCategory.id;
+          if (!categoryId && itemData.categories && itemData.categories.length > 0) {
+            const firstCat = itemData.categories[0];
+            categoryId = firstCat.id || null;
             if (categoryId && categoryMap.has(categoryId)) {
               categoryName = categoryMap.get(categoryId)!;
             }

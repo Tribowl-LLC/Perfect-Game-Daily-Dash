@@ -93,6 +93,16 @@ export const fetchRankedItems = async (
     revenue: toFloat(r.revenue),
     units: toFloat(r.units),
     transactions: toInt(r.transactions),
+    shareOfCategory: toFloat(r.shareOfCategory),
+    shareOfTotal: toFloat(r.shareOfTotal),
+    sourceBreakdown: Array.isArray(r.sourceBreakdown)
+      ? r.sourceBreakdown.map((s: Record<string, unknown>) => ({
+          source: toStr(s.source, 'Unknown'),
+          revenue: toFloat(s.revenue),
+          units: toFloat(s.units),
+          transactions: toInt(s.transactions),
+        }))
+      : [],
   }));
 };
 
