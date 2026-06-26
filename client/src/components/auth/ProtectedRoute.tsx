@@ -12,13 +12,8 @@ export default function ProtectedRoute({
   children, 
   requiredRole 
 }: ProtectedRouteProps) {
-  const { user, isLoading, isAuthenticated, checkAuth } = useAuth();
+  const { user, isLoading, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
-  
-  // Force a check for authentication on component mount
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
   
   // Use useEffect for navigation to prevent state updates during render
   useEffect(() => {

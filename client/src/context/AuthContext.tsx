@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { queryClient } from '@/lib/queryClient';
 
 interface User {
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     checkAuth();
   }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       setIsLoading(true);
       const response = await fetch('/api/auth/me', { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
@@ -70,7 +70,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
