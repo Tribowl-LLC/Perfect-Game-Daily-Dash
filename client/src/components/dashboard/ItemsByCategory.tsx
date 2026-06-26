@@ -267,7 +267,21 @@ export default function ItemsByCategory({
                   </TableCell>
                 </TableRow>
               )}
-              {!isLoading && !isError && items && items.map((item, idx) => {
+              {!isLoading && !isError && items && (() => {
+                const baseNamesWithMultipleVariants = new Set<string>();
+                for (const it of items) {
+                  const base = it.itemName.replace(/ - Regular$/i, '');
+                  if (base !== it.itemName) {
+                    if (items.some(other => other.catalogObjectId !== it.catalogObjectId && other.itemName.startsWith(base + ' - '))) {
+                      baseNamesWithMultipleVariants.add(base);
+                    }
+                  }
+                }
+                const displayName = (name: string) => {
+                  const base = name.replace(/ - Regular$/i, '');
+                  return baseNamesWithMultipleVariants.has(base) ? name : base;
+                };
+                return items.map((item, idx) => {
                 const isZero = metricValue(item, metric) === 0;
                 return (
                   <TableRow
@@ -276,7 +290,7 @@ export default function ItemsByCategory({
                     className={isZero ? "text-muted-foreground" : ""}
                   >
                     <TableCell className="text-right tabular-nums">{idx + 1}</TableCell>
-                    <TableCell className="font-medium">{item.itemName}</TableCell>
+                    <TableCell className="font-medium">{displayName(item.itemName)}</TableCell>
                     {showCategoryColumn && (
                       <TableCell className="text-sm text-muted-foreground">
                         {item.categoryName || "—"}
@@ -296,7 +310,8 @@ export default function ItemsByCategory({
                     </TableCell>
                   </TableRow>
                 );
-              })}
+              });
+              })()}
             </TableBody>
           </Table>
         </div>
