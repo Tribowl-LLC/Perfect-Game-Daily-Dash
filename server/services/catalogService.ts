@@ -204,14 +204,21 @@ export async function syncCatalog(): Promise<{
             }
           }
 
-          pageItems.push({
-            squareCatalogObjectId: catalogObjectId,
-            categoryId,
-            categoryName,
-            itemName,
-            isArchived,
-            updatedAt: new Date(),
-          } satisfies InsertSquareCatalogItem);
+          // Only store the parent ITEM row when it has no variations.
+          // Square order line items always reference a specific variation ID
+          // (never the parent ITEM ID itself), so a parent row with variations
+          // would always show zero sales and — after the UI strips " - Regular" —
+          // create a duplicate display name with no revenue.
+          if (!itemData.variations || itemData.variations.length === 0) {
+            pageItems.push({
+              squareCatalogObjectId: catalogObjectId,
+              categoryId,
+              categoryName,
+              itemName,
+              isArchived,
+              updatedAt: new Date(),
+            } satisfies InsertSquareCatalogItem);
+          }
 
           if (itemData.variations && Array.isArray(itemData.variations)) {
             for (const variation of itemData.variations) {
@@ -267,6 +274,37 @@ export async function syncCatalog(): Promise<{
     }
 
     logger.info('catalog.sync.items_done', { count: itemCount });
+
+    // Purge any lingering parent ITEM rows that have a "- <variant>" sibling
+    // in the same category and no sales. These accumulate when Square re-syncs
+    // an item that has variations — the parent ITEM ID never appears in order
+    // line items (Square sells the variation, not the parent), so these rows
+    // only create zero-revenue duplicates in the Items tab.
+    try {
+      const pruneResult = await db.execute<{ count: string }>(sql`
+        WITH deleted AS (
+          DELETE FROM square_catalog_items parent
+          WHERE NOT EXISTS (
+            SELECT 1 FROM order_line_items oli
+            WHERE oli.product_id = parent.square_catalog_object_id
+          )
+          AND EXISTS (
+            SELECT 1 FROM square_catalog_items sibling
+            WHERE sibling.category_id = parent.category_id
+              AND sibling.item_name LIKE parent.item_name || ' - %'
+              AND sibling.square_catalog_object_id != parent.square_catalog_object_id
+          )
+          RETURNING 1
+        )
+        SELECT COUNT(*)::text AS count FROM deleted
+      `);
+      const pruned = parseInt(pruneResult.rows[0]?.count ?? '0', 10);
+      if (pruned > 0) {
+        logger.info('catalog.sync.parent_items_pruned', { count: pruned });
+      }
+    } catch (e) {
+      logger.warn('catalog.sync.parent_prune_failed', errorContext(e));
+    }
 
     catalogItemCache.clear();
     cacheLoadedAt = 0;
