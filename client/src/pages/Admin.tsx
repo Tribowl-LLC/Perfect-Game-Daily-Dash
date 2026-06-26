@@ -94,6 +94,25 @@ export default function Admin() {
     refetchInterval: false,
   });
 
+  const catalogSyncMutation = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/sync/catalog'),
+    onSuccess: () => {
+      toast({
+        title: 'Catalog sync complete',
+        description: 'Items and categories have been refreshed from Square.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/items/categories'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/sync/status'] });
+    },
+    onError: () => {
+      toast({
+        title: 'Catalog sync failed',
+        description: 'Check the server logs for details.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const historicalSyncMutation = useMutation({
     mutationFn: () => apiRequest('POST', '/api/sync/historical'),
     onSuccess: () => {
@@ -302,6 +321,32 @@ export default function Admin() {
                 >
                   <RefreshCw className={`h-4 w-4 ${historicalSyncMutation.isPending ? 'animate-spin' : ''}`} />
                   {historicalSyncMutation.isPending ? 'Starting...' : 'Start Full Catch-up Sync'}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="h-5 w-5 text-muted-foreground" />
+                  Catalog Sync
+                </CardTitle>
+                <CardDescription>
+                  Re-fetches your Square item catalog: categories, items, and variations. Run this after adding, renaming, or reorganizing items in Square so the Items by Category tab reflects the latest structure.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground max-w-md">
+                  The nightly sync refreshes the catalog automatically. Use this for immediate updates after Square catalog changes.
+                </p>
+                <Button
+                  onClick={() => catalogSyncMutation.mutate()}
+                  disabled={catalogSyncMutation.isPending}
+                  variant="outline"
+                  className="shrink-0 gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${catalogSyncMutation.isPending ? 'animate-spin' : ''}`} />
+                  {catalogSyncMutation.isPending ? 'Syncing...' : 'Sync Catalog'}
                 </Button>
               </CardContent>
             </Card>
