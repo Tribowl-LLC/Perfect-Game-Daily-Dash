@@ -48,6 +48,7 @@ export default function AccountDrawer({ open, onOpenChange }: AccountDrawerProps
     try {
       await apiRequest('POST', '/api/sync/catalog');
       queryClient.invalidateQueries({ queryKey: ['/api/items/categories'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/items/ranked'] });
       toast({ title: 'Catalog sync complete', description: 'Items and categories refreshed from Square.' });
     } catch {
       toast({ title: 'Catalog sync failed', description: 'Check server logs for details.', variant: 'destructive' });

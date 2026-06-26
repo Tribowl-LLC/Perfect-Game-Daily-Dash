@@ -102,6 +102,7 @@ export default function Admin() {
         description: 'Items and categories have been refreshed from Square.',
       });
       queryClient.invalidateQueries({ queryKey: ['/api/items/categories'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/items/ranked'] });
       queryClient.invalidateQueries({ queryKey: ['/api/sync/status'] });
     },
     onError: () => {

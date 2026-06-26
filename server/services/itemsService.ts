@@ -174,6 +174,11 @@ export class ItemsService {
       WHERE oli.product_id IS NOT NULL
         AND o.created_at >= ${start}
         AND o.created_at <  ${end}
+        AND NOT EXISTS (
+          SELECT 1 FROM square_catalog_items sci
+          WHERE sci.square_catalog_object_id = oli.product_id
+            AND sci.item_name ILIKE '%(KDS)%'
+        )
     `);
     const totalMetrics = {
       revenue: Number(totalsResult.rows[0]?.revenue ?? 0),
@@ -202,6 +207,7 @@ export class ItemsService {
           category_name
         FROM square_catalog_items
         WHERE is_archived = false
+          AND item_name NOT ILIKE '%(KDS)%'
           AND category_id IN (${sql.join(categoryIds.map(id => sql`${id}`), sql.raw(', '))})
       ),
       sales AS (
