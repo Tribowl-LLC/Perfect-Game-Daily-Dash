@@ -268,79 +268,47 @@ export async function backfillCategories(): Promise<{
   try {
     logger.info('catalog.backfill.start');
 
-    await ensureCacheLoaded();
-
-    const lineItemResult = await db.execute<{
-      id: number;
-      product_id: string;
-      category: string | null;
-    }>(sql`
-      SELECT id, product_id, category
-      FROM order_line_items
-      WHERE product_id IS NOT NULL
+    // Bulk-update order_line_items: join directly against square_catalog_items
+    // rather than fetching every row into JS and updating one at a time.
+    const lineItemRes = await db.execute<{ count: string }>(sql`
+      WITH updated AS (
+        UPDATE order_line_items oli
+        SET category = sci.category_name
+        FROM square_catalog_items sci
+        WHERE oli.product_id = sci.square_catalog_object_id
+          AND sci.category_name IS NOT NULL
+          AND oli.category IS DISTINCT FROM sci.category_name
+        RETURNING 1
+      )
+      SELECT COUNT(*)::text AS count FROM updated
     `);
-
-    for (const row of lineItemResult.rows) {
-      const productId = row.product_id;
-      if (!productId) continue;
-
-      const newCategory = catalogItemCache.get(productId);
-      if (newCategory && newCategory !== row.category) {
-        await db.execute(sql`
-          UPDATE order_line_items
-          SET category = ${newCategory}
-          WHERE id = ${row.id}
-        `);
-        updatedLineItems++;
-      }
-    }
-
+    updatedLineItems = parseInt(lineItemRes.rows[0]?.count ?? '0', 10);
     logger.info('catalog.backfill.lineItems_done', { count: updatedLineItems });
 
-    const txResult = await db.execute<{
-      id: number;
-      category_id: string;
-      square_data: Record<string, unknown> | null;
-    }>(sql`
-      SELECT id, category_id, square_data
-      FROM transactions
+    // Bulk-update transactions: resolve orderId from square_data JSONB,
+    // join to the order's first categorised line item.
+    const txRes = await db.execute<{ count: string }>(sql`
+      WITH first_cat AS (
+        SELECT DISTINCT ON (o.square_id)
+          o.square_id,
+          sci.category_name
+        FROM orders o
+        JOIN order_line_items oli ON oli.order_id = o.id AND oli.product_id IS NOT NULL
+        JOIN square_catalog_items sci ON sci.square_catalog_object_id = oli.product_id
+        WHERE sci.category_name IS NOT NULL
+        ORDER BY o.square_id, oli.id
+      ),
+      updated AS (
+        UPDATE transactions t
+        SET category_id = fc.category_name
+        FROM first_cat fc
+        WHERE (t.square_data->>'orderId') = fc.square_id
+          AND t.category_id IS DISTINCT FROM fc.category_name
+        RETURNING 1
+      )
+      SELECT COUNT(*)::text AS count FROM updated
     `);
-
-    for (const row of txResult.rows) {
-      const squareData =
-        typeof row.square_data === 'object' && row.square_data !== null
-          ? (row.square_data as Record<string, unknown>)
-          : {};
-      const orderId = squareData.orderId as string | undefined;
-      if (!orderId) continue;
-
-      const orderLineItemsResult = await db.execute<{
-        product_id: string | null;
-      }>(sql`
-        SELECT oli.product_id
-        FROM order_line_items oli
-        INNER JOIN orders o ON oli.order_id = o.id
-        WHERE o.square_id = ${orderId}
-        AND oli.product_id IS NOT NULL
-        LIMIT 1
-      `);
-
-      if (orderLineItemsResult.rows.length > 0) {
-        const pid = orderLineItemsResult.rows[0].product_id;
-        if (pid) {
-          const newCat = catalogItemCache.get(pid);
-          if (newCat && newCat !== row.category_id) {
-            await db.execute(sql`
-              UPDATE transactions
-              SET category_id = ${newCat}
-              WHERE id = ${row.id}
-            `);
-            updatedTransactions++;
-          }
-        }
-      }
-    }
-
+    updatedTransactions = parseInt(txRes.rows[0]?.count ?? '0', 10);
     logger.info('catalog.backfill.transactions_done', { count: updatedTransactions });
 
     return { updatedLineItems, updatedTransactions, errors };
