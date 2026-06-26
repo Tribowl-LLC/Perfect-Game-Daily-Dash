@@ -30,12 +30,21 @@ export default function ItemsPerformance({
     queryFn: fetchCategoryTree,
   });
 
+  // Operator-hidden top-level categories: these are Square's online-ordering
+  // "menu" rollups, which the business does not want surfaced as their own
+  // Items-tab panels. Matched by name (case-insensitive); "PG Menu" is a
+  // different category and intentionally NOT excluded.
+  const HIDDEN_PANEL_NAMES = new Set(["online menu", "pg party menu"]);
+  const visibleTree = (tree ?? []).filter(
+    (n) => !HIDDEN_PANEL_NAMES.has(n.name.trim().toLowerCase()),
+  );
+
   // A rollup is any top-level category with at least one child. This is
   // intentional: if the operator hasn't set up sub-categories under
   // "Beverage" yet, that node is just a leaf and doesn't earn its own
   // panel. If there are no rollups at all, we fall back to all
   // top-level categories so the tab is still useful.
-  const rollups = (tree ?? []).filter((n) => n.children.length > 0);
+  const rollups = visibleTree.filter((n) => n.children.length > 0);
   // Spec asks for Food on the left and Beverage on the right. We honor
   // that explicitly when both are present; everything else falls back
   // to the alphabetical order the API already returns. Any rollup not
@@ -53,7 +62,7 @@ export default function ItemsPerformance({
     if (diff !== 0) return diff;
     return a.name.localeCompare(b.name);
   });
-  const panels = sortedRollups.length > 0 ? sortedRollups : (tree ?? []);
+  const panels = sortedRollups.length > 0 ? sortedRollups : visibleTree;
 
   if (isLoading) {
     return (
