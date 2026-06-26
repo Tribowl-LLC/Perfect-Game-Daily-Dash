@@ -202,7 +202,7 @@ export class ItemsService {
           category_name
         FROM square_catalog_items
         WHERE is_archived = false
-          AND category_id = ANY(${categoryIds})
+          AND category_id IN (${sql.join(categoryIds.map(id => sql`${id}`), sql.raw(', '))})
       ),
       sales AS (
         SELECT
