@@ -321,7 +321,11 @@ export class ItemsService {
       }
     }
 
-    const items = Array.from(mergedByKey.values());
+    // Main Items tab only lists items that actually sold — hide $0-revenue
+    // rows. Filter after merging so a sold variation isn't dropped just
+    // because a duplicate $0 copy existed. (Zero-sales items will still be
+    // available for the future per-category BI drill-down.)
+    const items = Array.from(mergedByKey.values()).filter((item) => item.revenue !== 0);
 
     const selectedMetricValue = (i: RankedItem | ItemSourceBreakdown | typeof totalMetrics) =>
       metric === 'revenue' ? i.revenue

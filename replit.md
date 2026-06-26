@@ -105,8 +105,8 @@ Item categories come from Square's Catalog API, not name guessing. `catalogServi
 ## Dashboard
 
 ### Items by Category tab
-Between Overview and Gift Cards (`BottomNavigation.tsx`). Renders one panel per top-level Square category rollup (any top-level category with ≥1 child becomes a panel — nothing is hardcoded to Food/Beverage). Each panel has its own category dropdown (`All <Rollup>` + direct children), metric toggle (Revenue/Units/Transactions), and a full ranked list of every non-archived item (zero-sales items shown muted at the bottom).
-- `itemsService.ts`: `getCategoryTree()` (full forest), `getRankedItems(categoryId, metric, dateRange)` (LEFT JOIN catalog items against windowed `order_line_items` so zero-sales items still appear; JS sort with name tiebreaker).
+Between Overview and Gift Cards (`BottomNavigation.tsx`). Renders one panel per top-level Square category rollup (any top-level category with ≥1 child becomes a panel — nothing is hardcoded to Food/Beverage). Each panel has its own category dropdown (`All <Rollup>` + direct children), metric toggle (Revenue/Units/Transactions), and a ranked list of items that sold in the window. Only items with non-zero revenue are listed (zero-revenue items are hidden); internal `(KDS)` items are excluded entirely. Zero-sales items will become available in the planned per-category BI drill-down.
+- `itemsService.ts`: `getCategoryTree()` (full forest), `getRankedItems(categoryId, metric, dateRange)` (LEFT JOIN catalog items against windowed `order_line_items`, merges duplicate `- Regular` variations, then filters out `(KDS)` items and any row with `revenue === 0`; JS sort with name tiebreaker).
 - `GET /api/items/categories`, `GET /api/items/ranked` (both 60/min, behind `requireAuth`; `ranked` requires `categoryId` and validates `metric`).
 - Opening the tab auto-bumps the range to `last7days` once per session, but only if the user hasn't picked a range (`dateRangeUserChanged` / `itemsTabAutoSet` guards). Visible to all authenticated users.
 
