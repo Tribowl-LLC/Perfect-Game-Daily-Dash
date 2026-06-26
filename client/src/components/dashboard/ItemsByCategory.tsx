@@ -191,8 +191,12 @@ export default function ItemsByCategory({
                 <SelectItem
                   key={node.squareCategoryId}
                   value={node.squareCategoryId}
+                  className={depth === 0 && node.children.length > 0 ? "font-semibold" : ""}
                 >
-                  {depth > 0 ? "\u00A0".repeat(depth * 3) + "› " : ""}{node.name}
+                  {depth > 0
+                    ? <span className="text-muted-foreground mr-1">{"\u00A0".repeat(depth * 2)}›</span>
+                    : null}
+                  {node.name}
                 </SelectItem>
               ))}
             </SelectContent>
