@@ -77,6 +77,9 @@ export async function syncCatalog(): Promise<{
     logger.info('catalog.sync.start');
 
     const categoryMap = new Map<string, string>();
+    // Track every Square category ID seen in this sync so we can prune
+    // stale rows that were deleted or reorganised away in Square.
+    const seenCategoryIds = new Set<string>();
 
     try {
       let catPage = await squareClient.catalog.list({ types: 'CATEGORY' });
@@ -100,6 +103,7 @@ export async function syncCatalog(): Promise<{
             (typeof catData.parentCategoryId === 'string' && catData.parentCategoryId) ||
             null;
           categoryMap.set(catId, catName);
+          seenCategoryIds.add(catId);
           pageCategories.push({ squareCategoryId: catId, name: catName, parentCategoryId, updatedAt: new Date() });
         }
         if (pageCategories.length > 0) {
@@ -118,6 +122,26 @@ export async function syncCatalog(): Promise<{
         }
         if (!catPage.hasNextPage() || objects.length === 0) break;
         catPage = await catPage.getNextPage();
+      }
+
+      // Delete any categories in the DB that Square no longer returns —
+      // these are categories that were deleted or reorganised away. Keeping
+      // them causes phantom children to appear in the tree and pollutes the
+      // Items tab dropdown.
+      if (seenCategoryIds.size > 0) {
+        const seenArray = Array.from(seenCategoryIds);
+        const deleted = await db.execute<{ count: string }>(sql`
+          WITH removed AS (
+            DELETE FROM square_categories
+            WHERE square_category_id != ALL(${seenArray})
+            RETURNING 1
+          )
+          SELECT COUNT(*)::text AS count FROM removed
+        `);
+        const deletedCount = parseInt(deleted.rows[0]?.count ?? '0', 10);
+        if (deletedCount > 0) {
+          logger.info('catalog.sync.stale_categories_pruned', { count: deletedCount });
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

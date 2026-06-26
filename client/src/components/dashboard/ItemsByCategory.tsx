@@ -54,6 +54,19 @@ interface ItemsByCategoryProps {
 
 const ALL_VALUE = "__all__";
 
+/** Flatten a category tree into a depth-annotated list for the dropdown. */
+function flattenDescendants(
+  nodes: CategoryTreeNode[],
+  depth = 0,
+): { node: CategoryTreeNode; depth: number }[] {
+  const out: { node: CategoryTreeNode; depth: number }[] = [];
+  for (const n of nodes) {
+    out.push({ node: n, depth });
+    if (n.children.length > 0) out.push(...flattenDescendants(n.children, depth + 1));
+  }
+  return out;
+}
+
 const revenueFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -174,12 +187,12 @@ export default function ItemsByCategory({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL_VALUE}>All {rollup.name}</SelectItem>
-              {rollup.children.map((child) => (
+              {flattenDescendants(rollup.children).map(({ node, depth }) => (
                 <SelectItem
-                  key={child.squareCategoryId}
-                  value={child.squareCategoryId}
+                  key={node.squareCategoryId}
+                  value={node.squareCategoryId}
                 >
-                  {child.name}
+                  {depth > 0 ? "\u00A0".repeat(depth * 3) + "› " : ""}{node.name}
                 </SelectItem>
               ))}
             </SelectContent>
