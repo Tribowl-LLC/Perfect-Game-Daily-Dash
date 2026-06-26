@@ -271,7 +271,51 @@ export class ItemsService {
       }
     }
 
-    const items = Array.from(byItem.values());
+    const rawItems = Array.from(byItem.values());
+
+    // Determine which base names genuinely have a different (non-Regular) sibling.
+    // Two copies of "Boneless Wings - Regular" do NOT count — both are Regular.
+    const basesWithNonRegularSibling = new Set<string>();
+    for (const item of rawItems) {
+      const base = item.itemName.replace(/ - Regular$/i, '');
+      if (base === item.itemName) continue;
+      const hasNonRegular = rawItems.some(
+        other => other.catalogObjectId !== item.catalogObjectId &&
+          other.itemName.startsWith(base + ' - ') &&
+          !/- Regular$/i.test(other.itemName)
+      );
+      if (hasNonRegular) basesWithNonRegularSibling.add(base);
+    }
+
+    // Normalize display names (strip "- Regular" when no non-Regular sibling exists),
+    // then merge any rows that share the same normalized name + category — collapsing
+    // duplicate Square variation objects for the same item into one row.
+    const mergedByKey = new Map<string, RankedItem>();
+    for (const item of rawItems) {
+      const base = item.itemName.replace(/ - Regular$/i, '');
+      const displayName = basesWithNonRegularSibling.has(base) ? item.itemName : base;
+      const mergeKey = `${displayName}|||${item.categoryId ?? ''}`;
+      const existing = mergedByKey.get(mergeKey);
+      if (existing) {
+        existing.revenue += item.revenue;
+        existing.units += item.units;
+        existing.transactions += item.transactions;
+        for (const src of item.sourceBreakdown) {
+          let row = existing.sourceBreakdown.find(s => s.source === src.source);
+          if (!row) {
+            row = { source: src.source, revenue: 0, units: 0, transactions: 0 };
+            existing.sourceBreakdown.push(row);
+          }
+          row.revenue += src.revenue;
+          row.units += src.units;
+          row.transactions += src.transactions;
+        }
+      } else {
+        mergedByKey.set(mergeKey, { ...item, itemName: displayName });
+      }
+    }
+
+    const items = Array.from(mergedByKey.values());
 
     const selectedMetricValue = (i: RankedItem | ItemSourceBreakdown | typeof totalMetrics) =>
       metric === 'revenue' ? i.revenue

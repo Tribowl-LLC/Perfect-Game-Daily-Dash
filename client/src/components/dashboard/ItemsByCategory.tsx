@@ -276,7 +276,11 @@ export default function ItemsByCategory({
                 for (const it of items) {
                   const base = it.itemName.replace(/ - Regular$/i, '');
                   if (base !== it.itemName) {
-                    if (items.some(other => other.catalogObjectId !== it.catalogObjectId && other.itemName.startsWith(base + ' - '))) {
+                    if (items.some(other =>
+                      other.catalogObjectId !== it.catalogObjectId &&
+                      other.itemName.startsWith(base + ' - ') &&
+                      !/- Regular$/i.test(other.itemName)
+                    )) {
                       baseNamesWithMultipleVariants.add(base);
                     }
                   }
