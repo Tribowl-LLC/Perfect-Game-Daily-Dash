@@ -9,11 +9,13 @@
  *      sub-categories as the per-panel dropdown.
  *
  *   2. `getRankedItems({ categoryId, metric, dateRange })` — for the
- *      given category (rollup OR specific child), return a fully ranked
- *      list of every non-archived catalog item that lives under it,
- *      INCLUDING items with zero sales in the window. Zero-sales items
- *      come back with metric=0; the UI renders them at the bottom so
- *      the operator can see "nobody bought this".
+ *      given category (rollup OR specific child), return a ranked list of
+ *      the items that ACTUALLY SOLD in the window. Catalog rows are
+ *      LEFT JOINed against windowed sales, the online/POS duplicate
+ *      objects are merged by name + category + price, then `(KDS)` items
+ *      and any row with revenue === 0 are dropped. (Zero-sales items are
+ *      intentionally excluded here; they remain available for the planned
+ *      per-category BI drill-down.)
  *
  * Design notes:
  *   - We don't hardcode "Food" / "Beverage". Any category that has at
@@ -186,14 +188,17 @@ export class ItemsService {
       transactions: Number(totalsResult.rows[0]?.transactions ?? 0),
     };
 
-    // LEFT JOIN catalog items against the windowed sales aggregation so
-    // zero-sales items still come back. We keep source-level sales rows
-    // separate so the UI can show Online vs POS mix for each item.
+    // LEFT JOIN catalog items against the windowed sales aggregation so a row
+    // exists per catalog object even before merging (zero-sales rows are
+    // filtered out later, after the duplicate merge, so a sold variation is
+    // never dropped because a $0 duplicate copy shared its key). We keep
+    // source-level sales rows separate so the UI can show Online vs POS mix.
     const result = await db.execute<{
       catalog_object_id: string;
       item_name: string | null;
       category_id: string | null;
       category_name: string | null;
+      price_amount: string | number | null;
       source: string | null;
       revenue: string | number | null;
       units: string | number | null;
@@ -204,7 +209,8 @@ export class ItemsService {
           square_catalog_object_id,
           item_name,
           category_id,
-          category_name
+          category_name,
+          price_amount
         FROM square_catalog_items
         WHERE is_archived = false
           AND item_name NOT ILIKE '%(KDS)%'
@@ -229,6 +235,7 @@ export class ItemsService {
         ci.item_name,
         ci.category_id,
         ci.category_name,
+        ci.price_amount,
         s.source,
         COALESCE(s.revenue, 0)       AS revenue,
         COALESCE(s.units, 0)         AS units,
@@ -238,8 +245,19 @@ export class ItemsService {
     `);
 
     const byItem = new Map<string, RankedItem>();
+    // Current catalog price (cents) per catalog object, used as a merge-key
+    // component so only true online/POS duplicates (identical name + category
+    // + price) collapse — a different item sharing a name but priced
+    // differently stays its own row. Null prices fall back to name+category.
+    const priceByCatalogObject = new Map<string, number | null>();
     for (const r of result.rows) {
       const catalogObjectId = r.catalog_object_id;
+      if (!priceByCatalogObject.has(catalogObjectId)) {
+        priceByCatalogObject.set(
+          catalogObjectId,
+          r.price_amount != null ? Number(r.price_amount) : null,
+        );
+      }
       let item = byItem.get(catalogObjectId);
       if (!item) {
         item = {
@@ -294,13 +312,17 @@ export class ItemsService {
     }
 
     // Normalize display names (strip "- Regular" when no non-Regular sibling exists),
-    // then merge any rows that share the same normalized name + category — collapsing
-    // duplicate Square variation objects for the same item into one row.
+    // then merge any rows that share the same normalized name + category + price —
+    // collapsing the intentional online/POS duplicate Square objects (identical in
+    // every catalog attribute, no shared SKU) into one row, while keeping a
+    // genuinely different item that merely shares a name but is priced differently.
     const mergedByKey = new Map<string, RankedItem>();
     for (const item of rawItems) {
       const base = item.itemName.replace(/ - Regular$/i, '');
       const displayName = basesWithNonRegularSibling.has(base) ? item.itemName : base;
-      const mergeKey = `${displayName}|||${item.categoryId ?? ''}`;
+      const price = priceByCatalogObject.get(item.catalogObjectId);
+      const priceKey = price != null ? String(price) : '';
+      const mergeKey = `${displayName}|||${item.categoryId ?? ''}|||${priceKey}`;
       const existing = mergedByKey.get(mergeKey);
       if (existing) {
         existing.revenue += item.revenue;

@@ -549,6 +549,11 @@ export const squareCatalogItems = pgTable("square_catalog_items", {
   categoryId: text("category_id"),
   categoryName: text("category_name"),
   itemName: text("item_name"),
+  // Current Square catalog price in the smallest currency unit (cents),
+  // nullable for variable-price / parent-ITEM rows. Used alongside name +
+  // category to merge the intentional online/POS duplicate items Square
+  // stores with no shared SKU — see itemsService.getRankedItems.
+  priceAmount: integer("price_amount"),
   isArchived: boolean("is_archived").default(false).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

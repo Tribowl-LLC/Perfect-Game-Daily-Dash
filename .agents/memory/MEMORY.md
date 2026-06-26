@@ -1,3 +1,4 @@
 - [Editing .replit safely](dotreplit-editing.md) — use verifyAndReplaceDotReplit({tempFilePath}); bash blocks the literal "npm run dev"; secrets never go in [userenv] (committed to git).
 - [KDS items in reporting](kds-items-reporting.md) — "(KDS)" catalog items are $0 but carry phantom units/transactions; exclude from both rows AND totals denominators.
+- [Square online/POS duplicates](square-online-pos-duplicates.md) — every food item has 2 independent catalog objects (online+POS), no shared SKU; merge true dupes by name+category+price.
 - [Test suite shared-DB isolation](test-suite-shared-db-isolation.md) — vitest runs on ONE shared test DB; keep fileParallelism:false (global app_settings toggles race); pg row-lock waiters queue in 2 stages (transactionid + tuple).

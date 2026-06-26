@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, notInArray } from 'drizzle-orm';
 import { SquareClient, SquareEnvironment } from 'square';
 import {
   squareCategories,
@@ -130,17 +130,12 @@ export async function syncCatalog(): Promise<{
       // Items tab dropdown.
       if (seenCategoryIds.size > 0) {
         const seenArray = Array.from(seenCategoryIds);
-        const deleted = await db.execute<{ count: string }>(sql`
-          WITH removed AS (
-            DELETE FROM square_categories
-            WHERE square_category_id != ALL(${seenArray})
-            RETURNING 1
-          )
-          SELECT COUNT(*)::text AS count FROM removed
-        `);
-        const deletedCount = parseInt(deleted.rows[0]?.count ?? '0', 10);
-        if (deletedCount > 0) {
-          logger.info('catalog.sync.stale_categories_pruned', { count: deletedCount });
+        const deletedRows = await db
+          .delete(squareCategories)
+          .where(notInArray(squareCategories.squareCategoryId, seenArray))
+          .returning({ id: squareCategories.id });
+        if (deletedRows.length > 0) {
+          logger.info('catalog.sync.stale_categories_pruned', { count: deletedRows.length });
         }
       }
     } catch (e) {
@@ -215,6 +210,7 @@ export async function syncCatalog(): Promise<{
               categoryId,
               categoryName,
               itemName,
+              priceAmount: null,
               isArchived,
               updatedAt: new Date(),
             } satisfies InsertSquareCatalogItem);
@@ -236,11 +232,25 @@ export async function syncCatalog(): Promise<{
                 || varAny.isDeleted === true
                 || varAny.is_deleted === true;
 
+              // Current catalog price (cents). Square stores online and POS
+              // copies of the same item as separate objects with identical
+              // price; capturing it lets getRankedItems merge true duplicates
+              // without collapsing genuinely different items that share a name.
+              const vData = 'itemVariationData' in variation && variation.itemVariationData
+                && typeof variation.itemVariationData === 'object'
+                ? (variation.itemVariationData as { priceMoney?: { amount?: number | bigint | string | null } })
+                : null;
+              const rawPrice = vData?.priceMoney?.amount;
+              const priceAmount = rawPrice != null && Number.isFinite(Number(rawPrice))
+                ? Number(rawPrice)
+                : null;
+
               pageItems.push({
                 squareCatalogObjectId: variation.id,
                 categoryId,
                 categoryName,
                 itemName: varName,
+                priceAmount,
                 isArchived: varArchived,
                 updatedAt: new Date(),
               } satisfies InsertSquareCatalogItem);
@@ -258,6 +268,7 @@ export async function syncCatalog(): Promise<{
                 categoryId: sql`excluded.category_id`,
                 categoryName: sql`excluded.category_name`,
                 itemName: sql`excluded.item_name`,
+                priceAmount: sql`excluded.price_amount`,
                 isArchived: sql`excluded.is_archived`,
                 updatedAt: sql`excluded.updated_at`,
               },
