@@ -549,11 +549,16 @@ export const squareCatalogItems = pgTable("square_catalog_items", {
   categoryId: text("category_id"),
   categoryName: text("category_name"),
   itemName: text("item_name"),
-  // Current Square catalog price in the smallest currency unit (cents),
-  // nullable for variable-price / parent-ITEM rows. Used alongside name +
-  // category to merge the intentional online/POS duplicate items Square
-  // stores with no shared SKU — see itemsService.getRankedItems.
-  priceAmount: integer("price_amount"),
+  // Square's parent ITEM object id. Variation rows carry their parent ITEM's
+  // id; standalone (no-variation) item rows carry their own id. Lets the Items
+  // tab roll every variation of one item into a single row while keeping the
+  // intentional online vs POS duplicate ITEMs (separate Square objects, hence
+  // different parent_item_id) as distinct rows — see itemsService.getRankedItems.
+  parentItemId: text("parent_item_id"),
+  // The bare item name with no " - <variation>" suffix, used as the display
+  // name when variations are rolled up. `itemName` keeps the suffixed form
+  // (e.g. "Absolut - Regular") that the parent-prune logic relies on.
+  itemBaseName: text("item_base_name"),
   isArchived: boolean("is_archived").default(false).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

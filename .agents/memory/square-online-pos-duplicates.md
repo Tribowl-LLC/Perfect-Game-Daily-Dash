@@ -1,37 +1,51 @@
 ---
-name: Square online/POS catalog duplicates
-description: How to identify the intentional online-menu vs POS duplicate items in this Square catalog (no shared SKU exists)
+name: Square online/POS catalog duplicates & variation rollup
+description: How the Items-by-Category tab groups item sales — keep online/POS twins separate, roll variations up by parent ITEM
 ---
 
-# Square online/POS catalog duplicates
+# Square online/POS duplicates & variation rollup
 
 For (nearly) every food item, this merchant intentionally maintains **two
 separate Square catalog ITEM objects** — one wired to the online-ordering menu,
-one to the in-store POS. They are NOT linked by any shared identifier.
+one to the in-store POS. They are NOT linked by any shared identifier (within a
+twin pair name/category/price are identical; `sku`/`upc` are null — only ~5
+items catalog-wide have a SKU, none on twins; the only differing field is the
+Square object ID).
 
-**Confirmed from the live catalog (June 2026):** within a duplicate pair the
-name, category, and price are identical; `sku` and `upc` are `null` (only ~5
-items in the whole catalog have a SKU, none on duplicates). The ONLY field that
-differs is the internal Square object ID. There is no product code, GTIN, or
-relationship that ties the two copies together.
+## The owner's rule (decided June 2026)
+- **DO NOT merge the online vs POS twins.** They must stay as SEPARATE rows so
+  each channel's sales are tracked independently.
+- **DO merge all variations of the SAME item into one row** (e.g. "Absolut" +
+  "Absolut - Regular"; or a beer's Pint/Tall/Pitcher/Beer Tube), displayed
+  under the bare item name.
 
-**Consequence / rule:** the only reliable key to collapse a true duplicate is
-**normalized name + category + price**. Matching on name alone is wrong (it
-would merge two genuinely different items that happen to share a name); there is
-no finer-grained "same item" key available because Square stores none.
+**Why:** an earlier "merge by name+category+price" approach was explicitly
+rejected — it collapsed the two intentional twins (they share name+category+
+price) into one, destroying the per-channel split the owner needs.
 
-**Why price works as the discriminator:** across all 35 duplicate groups, every
-pair shares an identical price, so adding price never splits a real duplicate;
-and zero same-name+category groups have differing prices, so it changes nothing
-today while guarding against a future name collision between different items.
+## How it works now
+Square's own hierarchy is the key, no heuristics:
+- Order line items reference a **variation** id (`order_line_items.product_id`).
+- Each variation maps to its parent **ITEM** via
+  `square_catalog_items.parent_item_id` (= the ITEM object id; for a
+  no-variation item, its own id). `item_base_name` holds the bare item name.
+- `itemsService.getRankedItems` groups sales by
+  `COALESCE(parent_item_id, square_catalog_object_id)` and displays
+  `item_base_name`. Variations roll up; the two twins stay separate because they
+  are different ITEM objects → different `parent_item_id`.
+- `item_name` is left in the suffixed "Item - Variation" form because
+  `catalogService`'s parent-prune `LIKE parent||' - %'` depends on it.
 
-**How to apply:** `itemsService.getRankedItems` merges by name+category+price.
-The price lives in `square_catalog_items.price_amount` (cents, nullable for
-variable-price/parent rows), populated by `catalogService.syncCatalog()`. The
-two copies are distinguishable only by *where they sell* — the order `source`
-(Online vs POS) — which is why the merged row shows a combined source mix.
+**`transactions` correctness:** computed as COUNT(DISTINCT order_id) per
+(item, source) in SQL, then summed across sources in JS. Each order has exactly
+one source, so summing per-source distinct counts equals the item's true
+distinct-order total (and one order buying two variations of the same item now
+counts once, since variations are grouped before the distinct count).
 
-**Drizzle upsert gotcha hit here:** adding a new column to the schema is not
-enough — `catalogService` upserts catalog rows with `onConflictDoUpdate`, and
-the new column MUST be added to its `set:` clause or existing rows (the common
-case, since the catalog already exists) never receive the value on re-sync.
+## Drizzle upsert gotcha (re-learned)
+Adding a column to the schema is not enough — `catalogService` upserts with
+`onConflictDoUpdate`, and any new column MUST be added to its `set:` clause or
+existing rows (the common case) never get the value on re-sync. After a schema
+change, re-run `syncCatalog()` to backfill the new columns before relying on
+them; `getRankedItems` uses `COALESCE(...)` fallbacks so it degrades safely
+until the backfill lands.

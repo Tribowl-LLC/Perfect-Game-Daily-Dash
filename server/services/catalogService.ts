@@ -210,7 +210,9 @@ export async function syncCatalog(): Promise<{
               categoryId,
               categoryName,
               itemName,
-              priceAmount: null,
+              // A standalone item is its own "parent"; the bare name is the display name.
+              parentItemId: catalogObjectId,
+              itemBaseName: itemName,
               isArchived,
               updatedAt: new Date(),
             } satisfies InsertSquareCatalogItem);
@@ -232,25 +234,15 @@ export async function syncCatalog(): Promise<{
                 || varAny.isDeleted === true
                 || varAny.is_deleted === true;
 
-              // Current catalog price (cents). Square stores online and POS
-              // copies of the same item as separate objects with identical
-              // price; capturing it lets getRankedItems merge true duplicates
-              // without collapsing genuinely different items that share a name.
-              const vData = 'itemVariationData' in variation && variation.itemVariationData
-                && typeof variation.itemVariationData === 'object'
-                ? (variation.itemVariationData as { priceMoney?: { amount?: number | bigint | string | null } })
-                : null;
-              const rawPrice = vData?.priceMoney?.amount;
-              const priceAmount = rawPrice != null && Number.isFinite(Number(rawPrice))
-                ? Number(rawPrice)
-                : null;
-
               pageItems.push({
                 squareCatalogObjectId: variation.id,
                 categoryId,
                 categoryName,
                 itemName: varName,
-                priceAmount,
+                // Every variation rolls up to its parent ITEM and is displayed
+                // under the bare item name in the Items tab.
+                parentItemId: catalogObjectId,
+                itemBaseName: itemName,
                 isArchived: varArchived,
                 updatedAt: new Date(),
               } satisfies InsertSquareCatalogItem);
@@ -268,7 +260,8 @@ export async function syncCatalog(): Promise<{
                 categoryId: sql`excluded.category_id`,
                 categoryName: sql`excluded.category_name`,
                 itemName: sql`excluded.item_name`,
-                priceAmount: sql`excluded.price_amount`,
+                parentItemId: sql`excluded.parent_item_id`,
+                itemBaseName: sql`excluded.item_base_name`,
                 isArchived: sql`excluded.is_archived`,
                 updatedAt: sql`excluded.updated_at`,
               },

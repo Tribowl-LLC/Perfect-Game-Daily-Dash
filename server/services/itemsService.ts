@@ -10,12 +10,15 @@
  *
  *   2. `getRankedItems({ categoryId, metric, dateRange })` — for the
  *      given category (rollup OR specific child), return a ranked list of
- *      the items that ACTUALLY SOLD in the window. Catalog rows are
- *      LEFT JOINed against windowed sales, the online/POS duplicate
- *      objects are merged by name + category + price, then `(KDS)` items
- *      and any row with revenue === 0 are dropped. (Zero-sales items are
- *      intentionally excluded here; they remain available for the planned
- *      per-category BI drill-down.)
+ *      the items that ACTUALLY SOLD in the window. Sales are grouped by the
+ *      parent Square ITEM (`parent_item_id`), so every variation of an item
+ *      (Pint/Tall/Pitcher, "- Regular", …) rolls up into ONE row shown under
+ *      the bare item name. The two intentional online vs POS duplicate ITEMs
+ *      stay SEPARATE rows — they are distinct Square objects with distinct
+ *      parent_item_id values, so each channel can be tracked on its own.
+ *      `(KDS)` items and any row with revenue === 0 are dropped. (Zero-sales
+ *      items are intentionally excluded here; they remain available for the
+ *      planned per-category BI drill-down.)
  *
  * Design notes:
  *   - We don't hardcode "Food" / "Beverage". Any category that has at
@@ -24,9 +27,9 @@
  *   - Aggregation joins `order_line_items` against `orders.created_at`
  *     using the same Eastern-time business window the rest of the
  *     dashboard uses, so numbers match the Overview tab.
- *   - Item-level joins use `product_id` → `square_catalog_object_id`
- *     because Square line items reference variation IDs and our catalog
- *     cache stores both items and their variations under the same key.
+ *   - Square line items reference variation IDs (`product_id`); we map each
+ *     to its parent ITEM via `square_catalog_items.parent_item_id` to roll a
+ *     multi-variation item's sales together under one display name.
  */
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
@@ -188,29 +191,30 @@ export class ItemsService {
       transactions: Number(totalsResult.rows[0]?.transactions ?? 0),
     };
 
-    // LEFT JOIN catalog items against the windowed sales aggregation so a row
-    // exists per catalog object even before merging (zero-sales rows are
-    // filtered out later, after the duplicate merge, so a sold variation is
-    // never dropped because a $0 duplicate copy shared its key). We keep
-    // source-level sales rows separate so the UI can show Online vs POS mix.
+    // Group sales by the parent Square ITEM. Each line item references a
+    // variation ID (`oli.product_id`); joining to the catalog maps it to its
+    // parent ITEM (`parent_item_id`) and bare display name, so all variations
+    // of one item sum into a single row. The intentional online vs POS twins
+    // are DIFFERENT Square ITEM objects (different parent_item_id), so they
+    // remain separate rows and each channel stays independently trackable.
+    // INNER JOIN to sales returns only items that actually sold in the window.
     const result = await db.execute<{
-      catalog_object_id: string;
-      item_name: string | null;
+      item_key: string;
+      display_name: string | null;
       category_id: string | null;
       category_name: string | null;
-      price_amount: string | number | null;
       source: string | null;
       revenue: string | number | null;
       units: string | number | null;
       transactions: string | number | null;
     }>(sql`
-      WITH category_items AS (
+      WITH catalog AS (
         SELECT
           square_catalog_object_id,
-          item_name,
+          COALESCE(parent_item_id, square_catalog_object_id) AS item_key,
+          COALESCE(item_base_name, item_name)                AS display_name,
           category_id,
-          category_name,
-          price_amount
+          category_name
         FROM square_catalog_items
         WHERE is_archived = false
           AND item_name NOT ILIKE '%(KDS)%'
@@ -218,51 +222,42 @@ export class ItemsService {
       ),
       sales AS (
         SELECT
-          oli.product_id AS catalog_object_id,
+          c.item_key,
+          c.display_name,
+          c.category_id,
+          c.category_name,
           o.source,
           COALESCE(SUM(oli.total_money), 0) AS revenue,
-          COALESCE(SUM(oli.quantity), 0) AS units,
-          COUNT(DISTINCT oli.order_id) AS transactions
+          COALESCE(SUM(oli.quantity), 0)    AS units,
+          COUNT(DISTINCT oli.order_id)      AS transactions
         FROM order_line_items oli
-        INNER JOIN orders o ON o.id = oli.order_id
+        INNER JOIN orders o   ON o.id = oli.order_id
+        INNER JOIN catalog c  ON c.square_catalog_object_id = oli.product_id
         WHERE oli.product_id IS NOT NULL
           AND o.created_at >= ${start}
           AND o.created_at <  ${end}
-        GROUP BY oli.product_id, o.source
+        GROUP BY c.item_key, c.display_name, c.category_id, c.category_name, o.source
       )
-      SELECT
-        ci.square_catalog_object_id AS catalog_object_id,
-        ci.item_name,
-        ci.category_id,
-        ci.category_name,
-        ci.price_amount,
-        s.source,
-        COALESCE(s.revenue, 0)       AS revenue,
-        COALESCE(s.units, 0)         AS units,
-        COALESCE(s.transactions, 0)  AS transactions
-      FROM category_items ci
-      LEFT JOIN sales s ON s.catalog_object_id = ci.square_catalog_object_id
+      SELECT item_key, display_name, category_id, category_name, source,
+             revenue, units, transactions
+      FROM sales
     `);
 
+    // Roll the per-(item, source) rows up into one RankedItem per parent ITEM.
+    // Each order belongs to exactly one source, so summing per-source distinct
+    // order counts yields the item's true distinct-order (transactions) total.
     const byItem = new Map<string, RankedItem>();
-    // Current catalog price (cents) per catalog object, used as a merge-key
-    // component so only true online/POS duplicates (identical name + category
-    // + price) collapse — a different item sharing a name but priced
-    // differently stays its own row. Null prices fall back to name+category.
-    const priceByCatalogObject = new Map<string, number | null>();
     for (const r of result.rows) {
-      const catalogObjectId = r.catalog_object_id;
-      if (!priceByCatalogObject.has(catalogObjectId)) {
-        priceByCatalogObject.set(
-          catalogObjectId,
-          r.price_amount != null ? Number(r.price_amount) : null,
-        );
-      }
-      let item = byItem.get(catalogObjectId);
+      const itemKey = r.item_key;
+      const revenue = Number(r.revenue ?? 0);
+      const units = Number(r.units ?? 0);
+      const transactions = Number(r.transactions ?? 0);
+
+      let item = byItem.get(itemKey);
       if (!item) {
         item = {
-          catalogObjectId,
-          itemName: r.item_name ?? 'Unnamed Item',
+          catalogObjectId: itemKey,
+          itemName: r.display_name ?? 'Unnamed Item',
           categoryId: r.category_id,
           categoryName: r.category_name,
           revenue: 0,
@@ -272,12 +267,9 @@ export class ItemsService {
           shareOfTotal: 0,
           sourceBreakdown: [],
         };
-        byItem.set(catalogObjectId, item);
+        byItem.set(itemKey, item);
       }
 
-      const revenue = Number(r.revenue ?? 0);
-      const units = Number(r.units ?? 0);
-      const transactions = Number(r.transactions ?? 0);
       item.revenue += revenue;
       item.units += units;
       item.transactions += transactions;
@@ -295,59 +287,9 @@ export class ItemsService {
       }
     }
 
-    const rawItems = Array.from(byItem.values());
-
-    // Determine which base names genuinely have a different (non-Regular) sibling.
-    // Two copies of "Boneless Wings - Regular" do NOT count — both are Regular.
-    const basesWithNonRegularSibling = new Set<string>();
-    for (const item of rawItems) {
-      const base = item.itemName.replace(/ - Regular$/i, '');
-      if (base === item.itemName) continue;
-      const hasNonRegular = rawItems.some(
-        other => other.catalogObjectId !== item.catalogObjectId &&
-          other.itemName.startsWith(base + ' - ') &&
-          !/- Regular$/i.test(other.itemName)
-      );
-      if (hasNonRegular) basesWithNonRegularSibling.add(base);
-    }
-
-    // Normalize display names (strip "- Regular" when no non-Regular sibling exists),
-    // then merge any rows that share the same normalized name + category + price —
-    // collapsing the intentional online/POS duplicate Square objects (identical in
-    // every catalog attribute, no shared SKU) into one row, while keeping a
-    // genuinely different item that merely shares a name but is priced differently.
-    const mergedByKey = new Map<string, RankedItem>();
-    for (const item of rawItems) {
-      const base = item.itemName.replace(/ - Regular$/i, '');
-      const displayName = basesWithNonRegularSibling.has(base) ? item.itemName : base;
-      const price = priceByCatalogObject.get(item.catalogObjectId);
-      const priceKey = price != null ? String(price) : '';
-      const mergeKey = `${displayName}|||${item.categoryId ?? ''}|||${priceKey}`;
-      const existing = mergedByKey.get(mergeKey);
-      if (existing) {
-        existing.revenue += item.revenue;
-        existing.units += item.units;
-        existing.transactions += item.transactions;
-        for (const src of item.sourceBreakdown) {
-          let row = existing.sourceBreakdown.find(s => s.source === src.source);
-          if (!row) {
-            row = { source: src.source, revenue: 0, units: 0, transactions: 0 };
-            existing.sourceBreakdown.push(row);
-          }
-          row.revenue += src.revenue;
-          row.units += src.units;
-          row.transactions += src.transactions;
-        }
-      } else {
-        mergedByKey.set(mergeKey, { ...item, itemName: displayName });
-      }
-    }
-
-    // Main Items tab only lists items that actually sold — hide $0-revenue
-    // rows. Filter after merging so a sold variation isn't dropped just
-    // because a duplicate $0 copy existed. (Zero-sales items will still be
-    // available for the future per-category BI drill-down.)
-    const items = Array.from(mergedByKey.values()).filter((item) => item.revenue !== 0);
+    // Main Items tab only lists items that actually sold — hide $0-revenue rows.
+    // (Zero-sales items remain available for the future per-category BI drill-down.)
+    const items = Array.from(byItem.values()).filter((item) => item.revenue !== 0);
 
     const selectedMetricValue = (i: RankedItem | ItemSourceBreakdown | typeof totalMetrics) =>
       metric === 'revenue' ? i.revenue
