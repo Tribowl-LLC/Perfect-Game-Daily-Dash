@@ -66,6 +66,7 @@ export default function CategoryRevenuePieChart({
   // Concise slice labels: explicit overrides first, else strip " Income" suffix
   const LABEL_OVERRIDES: Record<string, string> = {
     "shoe rental income": "Shoes",
+    "attraction income": "Attractions",
   };
   const shortName = (name: string) =>
     LABEL_OVERRIDES[name.trim().toLowerCase()] ?? name.replace(/ Income$/i, "");
