@@ -94,24 +94,6 @@ const formatMetric = (item: RankedItem, metric: ItemMetric): string =>
     ? formatInt(item.units)
     : formatInt(item.transactions);
 
-const formatSourceMix = (item: RankedItem, metric: ItemMetric): string => {
-  const total = metricValue(item, metric);
-  if (total <= 0 || item.sourceBreakdown.length === 0) return "—";
-
-  return item.sourceBreakdown
-    .slice(0, 2)
-    .map((source) => {
-      const value =
-        metric === "revenue"
-          ? source.revenue
-          : metric === "units"
-          ? source.units
-          : source.transactions;
-      return `${source.source} ${formatPercent(value / total)}`;
-    })
-    .join(" / ");
-};
-
 export default function ItemsByCategory({
   rollup,
   dateRange,
@@ -127,7 +109,7 @@ export default function ItemsByCategory({
     selection === ALL_VALUE ? rollup.squareCategoryId : selection;
 
   const showCategoryColumn = selection === ALL_VALUE && rollup.children.length > 0;
-  const columnCount = showCategoryColumn ? 7 : 6;
+  const columnCount = showCategoryColumn ? 6 : 5;
 
   const queryKey = [
     "/api/items/ranked",
@@ -240,7 +222,6 @@ export default function ItemsByCategory({
                 </TableHead>
                 <TableHead className="text-right">% Cat</TableHead>
                 <TableHead className="text-right">% Total</TableHead>
-                <TableHead>Source Mix</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -253,7 +234,6 @@ export default function ItemsByCategory({
                     <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   </TableRow>
                 ))
               )}
@@ -312,9 +292,6 @@ export default function ItemsByCategory({
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatPercent(item.shareOfTotal)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatSourceMix(item, metric)}
                     </TableCell>
                   </TableRow>
                 );
