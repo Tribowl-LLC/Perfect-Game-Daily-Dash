@@ -4,6 +4,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -85,6 +86,18 @@ export default function CategoryRevenuePieChart({
 
   const totalRevenue = totals.reduce((sum, t) => sum + t.revenue, 0);
 
+  // Pure data-derived analysis (no AI): leading category + revenue concentration.
+  const leader = chartData[0];
+  const leaderPct =
+    leader && totalRevenue > 0 ? (leader.revenue / totalRevenue) * 100 : 0;
+  const topK = Math.min(3, chartData.length);
+  const topKPct =
+    totalRevenue > 0
+      ? (chartData.slice(0, topK).reduce((s, d) => s + d.revenue, 0) /
+          totalRevenue) *
+        100
+      : 0;
+
   return (
     <Card>
       <CardHeader className="items-center pb-0">
@@ -154,6 +167,22 @@ export default function CategoryRevenuePieChart({
           </ChartContainer>
         )}
       </CardContent>
+      {!isLoading && !isError && leader && totalRevenue > 0 && (
+        <CardFooter className="flex-col items-center gap-1.5 pt-0 text-sm">
+          <div className="flex items-center gap-1.5 font-medium leading-none">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+              style={{ background: leader.fill }}
+            />
+            {leader.name} leads with {leaderPct.toFixed(1)}% of revenue
+          </div>
+          <div className="text-center leading-snug text-muted-foreground">
+            {chartData.length > 1
+              ? `Top ${topK} categories drive ${topKPct.toFixed(0)}% of the ${fmt.format(totalRevenue)} total`
+              : `${fmt.format(totalRevenue)} total revenue`}
+          </div>
+        </CardFooter>
+      )}
     </Card>
   );
 }
