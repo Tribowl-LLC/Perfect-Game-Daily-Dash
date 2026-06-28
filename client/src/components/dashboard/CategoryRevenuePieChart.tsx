@@ -16,15 +16,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { CategoryRevenueTotal, DateRange } from "@shared/schema";
 import { fetchCategoryTotals } from "@/lib/squareApi";
 
+// Blue-shade palette (light → dark), matching the shadcn pie-chart example.
+// Largest slice (first, revenue-sorted) gets the lightest shade.
 const SLICE_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-  "hsl(280 65% 60%)",
-  "hsl(25 80% 55%)",
-  "hsl(180 50% 45%)",
+  "hsl(213, 90%, 72%)",
+  "hsl(215, 89%, 64%)",
+  "hsl(217, 91%, 56%)",
+  "hsl(221, 83%, 49%)",
+  "hsl(224, 76%, 42%)",
+  "hsl(226, 71%, 34%)",
+  "hsl(228, 64%, 27%)",
+  "hsl(229, 60%, 20%)",
 ];
 
 const HIDDEN_NAMES = new Set(["online menu", "pg party menu"]);
@@ -140,29 +142,11 @@ export default function CategoryRevenuePieChart({
                   dataKey="name"
                   className="fill-background"
                   stroke="none"
-                  fontSize={11}
+                  fontSize={12}
                 />
               </Pie>
             </PieChart>
           </ChartContainer>
-        )}
-
-        {/* Legend row below the chart */}
-        {!isLoading && !isError && chartData.length > 0 && (
-          <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1.5">
-            {chartData.map((d) => (
-              <div key={d.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                  style={{ background: d.fill }}
-                />
-                <span>{d.name}</span>
-                <span className="tabular-nums font-medium text-foreground">
-                  {fmt.format(d.revenue)}
-                </span>
-              </div>
-            ))}
-          </div>
         )}
       </CardContent>
     </Card>
