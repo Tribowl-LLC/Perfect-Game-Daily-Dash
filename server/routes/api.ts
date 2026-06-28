@@ -339,6 +339,24 @@ export function createApiRouter(): Router {
   });
   
   /**
+   * Revenue totals per top-level rollup category
+   * GET /api/items/category-totals?dateRange=...
+   */
+  router.get('/items/category-totals', itemsCategoriesLimiter, async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      const { dateRange, startDate, endDate } = extractDateRange(req);
+      const totals = await itemsService.getCategoryRevenueTotals(dateRange, startDate, endDate);
+      res.json(totals);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
    * Hourly Revenue API
    * GET /api/hourly-revenue
    */

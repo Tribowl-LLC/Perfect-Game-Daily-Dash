@@ -607,6 +607,12 @@ export interface ItemSourceBreakdown {
   transactions: number;
 }
 
+export interface CategoryRevenueTotal {
+  categoryId: string;
+  categoryName: string;
+  revenue: number;
+}
+
 // Audit log of every MCP `run_read_query` invocation (success or failure).
 // Persisted so admins can review who ran what query without needing shell
 // access to the host. Pruned to ~90 days by a periodic job; see

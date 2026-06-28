@@ -1,5 +1,5 @@
 import { apiRequest } from "./queryClient";
-import { DateRange, DailySummary, GiftCardSummary, DetailedTransactionBreakdown, ProcessingFeeBreakdown, GcRedemptionBreakdown, CategoryTreeNode, RankedItem, ItemMetric } from "@shared/schema";
+import { DateRange, DailySummary, GiftCardSummary, DetailedTransactionBreakdown, ProcessingFeeBreakdown, GcRedemptionBreakdown, CategoryTreeNode, RankedItem, ItemMetric, CategoryRevenueTotal } from "@shared/schema";
 
 const toFloat = (v: unknown): number => typeof v === 'number' ? v : parseFloat(String(v ?? 0)) || 0;
 const toInt = (v: unknown): number => typeof v === 'number' ? v : parseInt(String(v ?? 0), 10) || 0;
@@ -66,6 +66,22 @@ export const fetchDailySummary = async (
     console.error('Error fetching daily summary:', error);
     throw error;
   }
+};
+
+export const fetchCategoryTotals = async (
+  dateRange: DateRange,
+  startDate?: Date,
+  endDate?: Date,
+): Promise<CategoryRevenueTotal[]> => {
+  const qs = buildQueryString(dateRange, startDate, endDate);
+  const response = await apiRequest('GET', `/api/items/category-totals?${qs}`);
+  const data = response instanceof Response ? await response.json() : response;
+  if (!Array.isArray(data)) return [];
+  return data.map((r: Record<string, unknown>) => ({
+    categoryId: String(r.categoryId ?? ''),
+    categoryName: String(r.categoryName ?? ''),
+    revenue: typeof r.revenue === 'number' ? r.revenue : parseFloat(String(r.revenue ?? 0)) || 0,
+  }));
 };
 
 export const fetchCategoryTree = async (): Promise<CategoryTreeNode[]> => {

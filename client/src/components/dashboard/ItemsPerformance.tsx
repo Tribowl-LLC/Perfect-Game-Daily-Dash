@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CategoryTreeNode, DateRange } from "@shared/schema";
 import { fetchCategoryTree } from "@/lib/squareApi";
 import ItemsByCategory from "./ItemsByCategory";
+import CategoryRevenuePieChart from "./CategoryRevenuePieChart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
@@ -103,16 +104,23 @@ export default function ItemsPerformance({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {panels.map((rollup) => (
-        <ItemsByCategory
-          key={rollup.squareCategoryId}
-          rollup={rollup}
-          dateRange={dateRange}
-          customStartDate={customStartDate}
-          customEndDate={customEndDate}
-        />
-      ))}
+    <div className="space-y-4">
+      <CategoryRevenuePieChart
+        dateRange={dateRange}
+        customStartDate={customStartDate}
+        customEndDate={customEndDate}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {panels.map((rollup) => (
+          <ItemsByCategory
+            key={rollup.squareCategoryId}
+            rollup={rollup}
+            dateRange={dateRange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+          />
+        ))}
+      </div>
     </div>
   );
 }

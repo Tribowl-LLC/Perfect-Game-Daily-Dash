@@ -36,6 +36,7 @@ import { sql } from 'drizzle-orm';
 import { getEasternDateRange } from '../dateUtils';
 import type {
   CategoryTreeNode,
+  CategoryRevenueTotal,
   DateRange,
   ItemSourceBreakdown,
   ItemMetric,
@@ -319,6 +320,72 @@ export class ItemsService {
       return a.itemName.localeCompare(b.itemName);
     });
     return items;
+  }
+
+  /**
+   * Return total revenue per top-level rollup category for the given date
+   * window. Uses a two-level join (category → parent category) to map every
+   * leaf category up to its rollup, then aggregates in a single query.
+   * Only non-archived, non-KDS items with a matching order line item are
+   * counted, consistent with getRankedItems.
+   */
+  async getCategoryRevenueTotals(
+    dateRange: DateRange,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<CategoryRevenueTotal[]> {
+    const { start, end } = getEasternDateRange(dateRange, startDate, endDate);
+
+    const result = await db.execute<{
+      rollup_id: string;
+      rollup_name: string;
+      revenue: string | number | null;
+    }>(sql`
+      WITH RECURSIVE cat_ancestry AS (
+        -- Anchor: top-level categories roll up to themselves
+        SELECT
+          square_category_id AS leaf_id,
+          square_category_id AS rollup_id,
+          name               AS rollup_name
+        FROM square_categories
+        WHERE parent_category_id IS NULL
+
+        UNION ALL
+
+        -- Recursive: each child inherits its parent's rollup
+        SELECT
+          c.square_category_id AS leaf_id,
+          ca.rollup_id,
+          ca.rollup_name
+        FROM square_categories c
+        INNER JOIN cat_ancestry ca
+          ON ca.leaf_id = c.parent_category_id
+      )
+      SELECT
+        ca.rollup_id,
+        ca.rollup_name,
+        COALESCE(SUM(oli.total_money), 0) AS revenue
+      FROM order_line_items oli
+      INNER JOIN orders o
+        ON o.id = oli.order_id
+      INNER JOIN square_catalog_items sci
+        ON sci.square_catalog_object_id = oli.product_id
+      INNER JOIN cat_ancestry ca
+        ON ca.leaf_id = sci.category_id
+      WHERE o.created_at  >= ${start}
+        AND o.created_at  <  ${end}
+        AND oli.product_id IS NOT NULL
+        AND sci.is_archived = false
+        AND sci.item_name NOT ILIKE '%(KDS)%'
+      GROUP BY ca.rollup_id, ca.rollup_name
+      ORDER BY revenue DESC
+    `);
+
+    return result.rows.map((r) => ({
+      categoryId: r.rollup_id,
+      categoryName: r.rollup_name,
+      revenue: Number(r.revenue ?? 0),
+    }));
   }
 }
 
