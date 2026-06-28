@@ -1,4 +1,5 @@
 - [Editing .replit safely](dotreplit-editing.md) — use verifyAndReplaceDotReplit({tempFilePath}); bash blocks the literal "npm run dev"; secrets never go in [userenv] (committed to git).
+- [Backend restart required](backend-restart-required.md) — dev server has no watch; restart "Start application" after any server/ edit before testing or claiming a fix.
 - [KDS items in reporting](kds-items-reporting.md) — "(KDS)" catalog items are $0 but carry phantom units/transactions; exclude from both rows AND totals denominators.
 - [Square online/POS duplicates & variation rollup](square-online-pos-duplicates.md) — keep online/POS twins separate; roll variations up by parent ITEM; price-merge approach was rejected.
 - [Test suite shared-DB isolation](test-suite-shared-db-isolation.md) — vitest runs on ONE shared test DB; keep fileParallelism:false (global app_settings toggles race); pg row-lock waiters queue in 2 stages (transactionid + tuple).
