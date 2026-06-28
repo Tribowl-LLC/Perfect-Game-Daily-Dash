@@ -63,8 +63,12 @@ export default function CategoryRevenuePieChart({
     (t) => !HIDDEN_NAMES.has(t.categoryName.trim().toLowerCase()) && t.revenue > 0,
   );
 
-  // Strip " Income" suffix for concise slice labels
-  const shortName = (name: string) => name.replace(/ Income$/i, "");
+  // Concise slice labels: explicit overrides first, else strip " Income" suffix
+  const LABEL_OVERRIDES: Record<string, string> = {
+    "shoe rental income": "Shoes",
+  };
+  const shortName = (name: string) =>
+    LABEL_OVERRIDES[name.trim().toLowerCase()] ?? name.replace(/ Income$/i, "");
 
   const chartData = totals.map((t, i) => ({
     id: t.categoryId,
